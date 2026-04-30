@@ -28,6 +28,7 @@ import { Suspense } from "react";
 import { lazyImportWithRetry } from "./utils/lazyWithRetry";
 
 const LoginPage = lazyImportWithRetry("./pages/Login/index");
+const SimpleChatPage = lazyImportWithRetry("./pages/SimpleChat/index");
 import { authApi } from "./api/modules/auth";
 import { languageApi } from "./api/modules/language";
 import { getApiUrl, getApiToken, clearAuthToken } from "./api/config";
@@ -191,6 +192,17 @@ function AppInner() {
                   <Suspense fallback={null}>
                     <LoginPage />
                   </Suspense>
+                }
+              />
+              {/* Simple chat page — no Header, no Sidebar */}
+              <Route
+                path="/simple"
+                element={
+                  <AuthGuard>
+                    <Suspense fallback={null}>
+                      <SimpleChatPage />
+                    </Suspense>
+                  </AuthGuard>
                 }
               />
               <Route
