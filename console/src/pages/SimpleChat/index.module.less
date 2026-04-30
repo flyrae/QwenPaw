@@ -1,0 +1,32 @@
+.container {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.chatArea {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+
+  :global {
+    [class*="chat-anywhere-default-header-right"] {
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+  }
+}
+
+.taskPanel {
+  width: 340px;
+  flex-shrink: 0;
+  height: 100%;
+  border-left: 1px solid var(--colorBorderSecondary, rgba(0, 0, 0, 0.06));
+  overflow: hidden;
+  background: var(--colorBgContainer, #fff);
+  display: flex;
+  flex-direction: column;
+}
