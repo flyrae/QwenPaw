@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Skill Market HTTP routes.
-"""
+"""Skill Market HTTP routes."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from ...config.hub_registry import list_configured_hubs
 from ...market import (
     MarketResult,
     MarketSearchError,
@@ -17,7 +17,6 @@ from ...market import (
 )
 from ...market.providers import PROVIDERS
 
-
 router = APIRouter(prefix="/market", tags=["market"])
 
 
@@ -26,6 +25,14 @@ class ProviderInfoSpec(BaseModel):
     label: str
     available: bool
     reason: str | None = None
+    supports_browse: bool = True
+
+
+class HubConfigSpec(BaseModel):
+    key: str
+    label: str
+    search_url: str
+    url_prefixes: list[str] = Field(default_factory=list)
     supports_browse: bool = True
 
 
@@ -79,6 +86,25 @@ class MarketSearchResponse(BaseModel):
 @router.get("/providers", response_model=list[ProviderInfoSpec])
 async def get_market_providers() -> list[ProviderInfoSpec]:
     return [_provider_info_to_spec(p) for p in list_providers()]
+
+
+@router.get("/hubs", response_model=list[HubConfigSpec])
+async def get_configured_hubs() -> list[HubConfigSpec]:
+    """Return user-configured third-party skill hubs.
+
+    Secrets are intentionally omitted; this endpoint only exposes metadata
+    needed by the UI to route install requests and show available sources.
+    """
+    return [
+        HubConfigSpec(
+            key=spec.key,
+            label=spec.label,
+            search_url=spec.search_url,
+            url_prefixes=spec.url_prefixes,
+            supports_browse=spec.supports_browse,
+        )
+        for spec in list_configured_hubs()
+    ]
 
 
 @router.get("/categories", response_model=list[CategorySpec])

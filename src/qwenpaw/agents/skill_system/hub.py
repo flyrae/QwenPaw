@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Skills hub client and install helpers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -29,6 +30,8 @@ from ...exceptions import (
     SkillsError,
 )
 from ...constant import EnvVarLoader
+from ...config.hub_registry import find_hub_for_url
+from ...market.configurable_spec import HubSpec
 from .pool_service import SkillPoolService
 from .store import suggest_conflict_name
 from .workspace_service import SkillService
@@ -48,6 +51,7 @@ InstallOrigin = Literal[
     "aliyun",
     "skillsmp",
     "clawhub",
+    "configured_hub",
     "url",
     "zip",
 ]
@@ -131,9 +135,9 @@ _drain_event.set()
 
 # Cancel checker (callable returning bool), propagated by contextvar so
 # nested install tasks each carry their own checker without interference.
-_cancel_checker_ctx: contextvars.ContextVar[
-    Any | None
-] = contextvars.ContextVar("skills_hub_cancel_checker", default=None)
+_cancel_checker_ctx: contextvars.ContextVar[Any | None] = (
+    contextvars.ContextVar("skills_hub_cancel_checker", default=None)
+)
 
 
 # ---------- Env-driven config ----------------------------------------------
@@ -400,12 +404,19 @@ async def _maybe_retry(
     return True
 
 
-def _request_headers(full_url: str, accept: str) -> dict[str, str]:
+def _request_headers(
+    full_url: str,
+    accept: str,
+    extra: dict[str, str] | None = None,
+) -> dict[str, str]:
     headers = {"Accept": accept}
     host = (urlparse(full_url).netloc or "").lower()
     github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
     if github_token and "api.github.com" in host:
         headers["Authorization"] = f"Bearer {github_token}"
+    if extra:
+        # Explicit headers win (e.g. configurable hub auth overrides defaults).
+        headers.update(extra)
     return headers
 
 
@@ -475,6 +486,7 @@ async def _http_fetch(
     accept: str = "application/json",
     max_bytes: int | None = None,
     timeout: float | None = None,
+    headers: dict[str, str] | None = None,
 ) -> bytes:
     _ensure_not_cancelled()
     if max_bytes is not None and max_bytes <= 0:
@@ -484,11 +496,14 @@ async def _http_fetch(
         )
 
     host = (urlparse(url).netloc or "").lower()
-    headers = _request_headers(url, accept)
+    request_headers = _request_headers(url, accept, extra=headers)
     attempts = _hub_http_retries() + 1
     last_error: Exception | None = None
 
-    stream_kwargs: dict[str, Any] = {"params": params, "headers": headers}
+    stream_kwargs: dict[str, Any] = {
+        "params": params,
+        "headers": request_headers,
+    }
     if timeout is not None:
         stream_kwargs["timeout"] = httpx.Timeout(
             connect=min(10.0, timeout),
@@ -608,12 +623,14 @@ async def _http_get(
     params: dict[str, Any] | None = None,
     accept: str = "application/json",
     timeout: float | None = None,
+    headers: dict[str, str] | None = None,
 ) -> str:
     payload = await _http_fetch(
         url,
         params=params,
         accept=accept,
         timeout=timeout,
+        headers=headers,
     )
     return payload.decode("utf-8", errors="replace")
 
@@ -636,12 +653,14 @@ async def _http_json_get(
     url: str,
     params: dict[str, Any] | None = None,
     timeout: float | None = None,
+    headers: dict[str, str] | None = None,
 ) -> Any:
     body = await _http_get(
         url,
         params=params,
         accept="application/json",
         timeout=timeout,
+        headers=headers,
     )
     return json.loads(body)
 
@@ -656,11 +675,13 @@ http_json_get = _http_json_get
 async def _http_text_get(
     url: str,
     params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> str:
     return await _http_get(
         url,
         params=params,
         accept="text/plain, text/markdown, */*",
+        headers=headers,
     )
 
 
@@ -2022,6 +2043,73 @@ async def search_hub_skills(
     return results
 
 
+# ---------- Provider: configured third-party hubs --------------------------
+
+
+def _match_configured_hub(url: str) -> HubSpec | None:
+    """Return the configured hub spec that owns ``url``."""
+    return find_hub_for_url(url)
+
+
+async def _fetch_bundle_from_configured_hub(
+    bundle_url: str,
+    requested_version: str,
+) -> tuple[Any, str]:
+    """Fetch a skill bundle from a user-configured third-party hub."""
+    spec = find_hub_for_url(bundle_url)
+    if spec is None:
+        raise ConfigurationException(
+            config_key="skills_hub.bundle_url",
+            message="No configured hub matches the provided URL",
+        )
+
+    slug = spec.extract_slug(bundle_url)
+    version = (requested_version or "").strip()
+    headers = spec.auth_headers()
+
+    detail_template = spec.detail_url or spec.install_url
+    if not detail_template:
+        raise ConfigurationException(
+            config_key=f"skill_hubs.{spec.key}.detail_url",
+            message=f"Hub '{spec.key}' is missing detail_url or install_url",
+        )
+
+    detail_url = detail_template.format(slug=slug, version=version)
+    detail = await _http_json_get(detail_url, headers=headers or None)
+    bundle = spec.to_bundle(detail, version)
+
+    # Some hubs list files in the version object but do not inline content.
+    # Fetch each empty file placeholder via the configured file_url.
+    if spec.file_url and isinstance(bundle.get("files"), dict):
+        files: dict[str, str] = bundle["files"]
+        for path, content in list(files.items()):
+            if content != "":
+                continue
+            file_url = spec.file_url.format(
+                slug=slug,
+                version=version,
+                path=path,
+            )
+            try:
+                file_params = {"path": path}
+                if version:
+                    file_params["version"] = version
+                files[path] = await _http_text_get(
+                    file_url,
+                    params=file_params,
+                    headers=headers or None,
+                )
+            except Exception as exc:  # pragma: no cover
+                logger.warning(
+                    "Failed to fetch hub file %s from %s: %s",
+                    path,
+                    file_url,
+                    exc,
+                )
+
+    return bundle, bundle_url
+
+
 # ---------- Provider routing -----------------------------------------------
 
 # Single source of truth for provider routing. Each entry pairs a sync,
@@ -2047,6 +2135,11 @@ PROVIDERS: list[tuple[InstallOrigin, _ProviderMatcher, _ProviderFetcher]] = [
     ("aliyun", _extract_aliyun_skill_spec, _fetch_bundle_from_aliyun_url),
     ("skillsmp", _extract_skillsmp_slug, _fetch_bundle_from_skillsmp_url),
     ("clawhub", _resolve_clawhub_slug, _fetch_bundle_from_clawhub_url),
+    (
+        "configured_hub",
+        _match_configured_hub,
+        _fetch_bundle_from_configured_hub,
+    ),
 ]
 
 
@@ -2059,11 +2152,15 @@ def _match_provider(
     return "url", None
 
 
-def _classify_install_origin(bundle_url: str) -> InstallOrigin:
+def _classify_install_origin(bundle_url: str) -> str:
     """Short origin label persisted on the manifest entry."""
     if not bundle_url:
         return ""
     name, _ = _match_provider(bundle_url)
+    if name == "configured_hub":
+        spec = find_hub_for_url(bundle_url)
+        if spec is not None:
+            return spec.origin
     return name
 
 
@@ -2089,7 +2186,7 @@ class _InstallPayload:
     scripts: dict[str, Any]
     extra_files: dict[str, Any]
     source_url: str
-    installed_from: InstallOrigin
+    installed_from: str
 
 
 async def _prepare_install_payload(
