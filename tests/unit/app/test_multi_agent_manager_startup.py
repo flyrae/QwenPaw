@@ -184,6 +184,46 @@ async def test_reload_marks_rejected_reusable_service_for_cleanup(
 
 
 @pytest.mark.asyncio
+async def test_reload_fires_workspace_created_hooks(monkeypatch) -> None:
+    """Reload must fire workspace_created hooks for the new instance.
+
+    Hot-installed plugins attach their runtime hooks / skills / modes via
+    these callbacks; without them the reloaded workspace runs without the
+    plugin until the next process restart.
+    """
+    manager = MultiAgentManager()
+    config = _config("agent-1")
+    monkeypatch.setattr(
+        "qwenpaw.app.multi_agent_manager.load_config",
+        lambda: config,
+    )
+    old_workspace = _ReloadWorkspace("agent-1")
+    new_workspace = _ReloadWorkspace("agent-1")
+    manager.agents["agent-1"] = old_workspace
+    manager._create_workspace = MagicMock(return_value=new_workspace)
+
+    fired = []
+
+    async def _spy(workspace_info):
+        fired.append(workspace_info)
+
+    monkeypatch.setattr(
+        MultiAgentManager,
+        "_fire_workspace_created_hooks",
+        staticmethod(_spy),
+    )
+
+    assert await manager.reload_agent("agent-1") is True
+    assert manager.agents["agent-1"] is new_workspace
+    assert fired == [
+        {
+            "agent_id": "agent-1",
+            "workspace_dir": "/tmp/agent-1",
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_reload_reuses_tracker_for_active_stream_reconnect(
     monkeypatch,
 ) -> None:
