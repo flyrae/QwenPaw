@@ -8,6 +8,10 @@ session, and ships a Console page with a dsh-style trajectory viewer:
 a three-lane timeline (Input / Model / Tools), a searchable ledger
 table, and a record inspector.
 
+> 完整的架构设计、事件模型、API、已知限制与演进记录见
+> [DESIGN.md](./DESIGN.md)（Full architecture, event model, API,
+> limitations, and history: see [DESIGN.md](./DESIGN.md)).
+
 ## Attribution
 
 The timeline projection algorithm (`frontend/src/trajectory/timeline.ts`),
