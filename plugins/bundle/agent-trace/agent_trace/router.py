@@ -93,6 +93,26 @@ def build_router() -> APIRouter:
             "mtime": result["mtime"],
         }
 
+    @router.get("/sessions/{session_id}/stats")
+    async def get_session_stats(session_id: str) -> Dict[str, Any]:
+        """Whole-log statistics fold (durations, TTFT, tokens, models)."""
+        service = _require_service()
+        _validate_session_id(session_id)
+        stats = service.store.compute_stats(session_id)
+        if stats is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return stats
+
+    @router.get("/sessions/{session_id}/lineage")
+    async def get_session_lineage(session_id: str) -> Dict[str, Any]:
+        """Root session link plus spawned child sessions."""
+        service = _require_service()
+        _validate_session_id(session_id)
+        lineage = service.store.lineage(session_id)
+        if lineage is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return lineage
+
     @router.get("/sessions/{session_id}/export")
     async def export_session(session_id: str) -> FileResponse:
         service = _require_service()

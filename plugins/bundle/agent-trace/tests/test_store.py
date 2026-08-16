@@ -208,6 +208,93 @@ class TestDeleteExport:
         assert await store.export_session("missing") is None
 
 
+class TestStatsAndLineage:
+    async def test_compute_stats_aggregates(self, tmp_path):
+        store = make_store(tmp_path)
+        store.append(
+            "s",
+            "run/start",
+            "r1",
+            {},
+            header={"session_id": "s", "agent_id": "main"},
+        )
+        store.append("s", "llm/result", "r1", {
+            "model": "m1",
+            "duration_ms": 100.0,
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cache_input_tokens": 3,
+                "cache_creation_input_tokens": 2,
+            },
+            "timing": {"ttft_ms": 20.0, "decode_ms": 80.0},
+        })
+        store.append("s", "tool/result", "r1", {
+            "ok": True,
+            "duration_ms": 50.0,
+        })
+        store.append("s", "tool/result", "r1", {
+            "ok": False,
+            "duration_ms": 5.0,
+            "error": "boom",
+        })
+        store.append("s", "run/end", "r1", {"status": "error"})
+        await store.flush()
+        stats = store.compute_stats("s")
+        assert stats["runs"] == 1
+        assert stats["llm_calls"] == 1
+        assert stats["tool_calls"] == 2
+        assert stats["errors"] == 2  # tool failure + run error
+        assert stats["llm_ms_total"] == 100.0
+        assert stats["tool_ms_total"] == 55.0
+        assert stats["ttft_ms_first"] == 20.0
+        assert stats["ttft_ms_avg"] == 20.0
+        assert stats["decode_ms_total"] == 80.0
+        assert stats["input_tokens"] == 10
+        assert stats["output_tokens"] == 5
+        assert stats["total_tokens"] == 15
+        assert stats["cache_read_tokens"] == 3
+        assert stats["cache_write_tokens"] == 2
+        assert stats["models"]["m1"]["calls"] == 1
+        assert stats["events"] == 5
+        assert stats["first_event_t"] is not None
+        assert stats["last_event_t"] is not None
+        assert store.compute_stats("missing") is None
+
+    async def test_lineage_root_and_children(self, tmp_path):
+        store = make_store(tmp_path)
+        # Child session: run referencing a root.
+        store.append(
+            "child",
+            "run/start",
+            "r1",
+            {"root_session_id": "root", "root_agent_id": "main"},
+            header={"session_id": "child", "agent_id": "sub"},
+        )
+        store.append("child", "run/end", "r1", {"status": "success"})
+        # Root session: spawn pointer into child.
+        store.append(
+            "root",
+            "agent/spawn",
+            "r1",
+            {
+                "child_session_id": "child",
+                "child_agent_id": "sub",
+                "child_trace_id": "r1",
+            },
+        )
+        await store.flush()
+        assert store.lineage("child") == {
+            "root_session_id": "root",
+            "children": [],
+        }
+        root = store.lineage("root")
+        assert root["root_session_id"] is None
+        assert root["children"][0]["child_session_id"] == "child"
+        assert root["children"][0]["child_agent_id"] == "sub"
+        assert store.lineage("missing") is None
+
+
 class TestRecovery:
     async def test_interrupted_runs_closed_at_startup(self, tmp_path):
         store = make_store(tmp_path)

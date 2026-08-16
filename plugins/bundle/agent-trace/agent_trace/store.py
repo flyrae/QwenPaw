@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 from .config import TraceConfig
 from .context import STATUS_RUNNING
 from .events import (
+    EVENT_AGENT_SPAWN,
     EVENT_LLM_RESULT,
     EVENT_RUN_END,
     EVENT_RUN_START,
@@ -354,6 +355,147 @@ class TraceStore:
         )
         return summaries
 
+    # ------------------------------------------------------------------
+    # Stats & lineage projections
+    # ------------------------------------------------------------------
+
+    def compute_stats(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Whole-log statistics fold for one session.
+
+        Mirrors the session-stats idea of an event-sourced trace:
+        durations, TTFT/decode spans, token buckets (including cache),
+        and a per-model breakdown.
+        """
+        session = self.read_session(session_id)
+        if session is None:
+            return None
+        stats: Dict[str, Any] = {
+            "runs": 0,
+            "llm_calls": 0,
+            "tool_calls": 0,
+            "errors": 0,
+            "llm_ms_total": 0.0,
+            "tool_ms_total": 0.0,
+            "ttft_ms_first": None,
+            "ttft_ms_sum": 0.0,
+            "decode_ms_total": 0.0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "total_tokens": 0,
+            "models": {},
+            "first_event_t": None,
+            "last_event_t": None,
+        }
+        ttft_count = 0
+        for event in session["events"]:
+            data = event.get("data") or {}
+            if not isinstance(data, dict):
+                continue
+            event_type = event.get("type")
+            if stats["first_event_t"] is None:
+                stats["first_event_t"] = event.get("t")
+            stats["last_event_t"] = event.get("t")
+            if event_type == EVENT_RUN_START:
+                stats["runs"] += 1
+            elif event_type == EVENT_RUN_END:
+                if data.get("status") == "error":
+                    stats["errors"] += 1
+            elif event_type == EVENT_LLM_RESULT:
+                stats["llm_calls"] += 1
+                stats["llm_ms_total"] += _num(data.get("duration_ms"))
+                timing = data.get("timing")
+                if isinstance(timing, dict):
+                    ttft = _num(timing.get("ttft_ms"))
+                    if ttft:
+                        stats["ttft_ms_sum"] += ttft
+                        ttft_count += 1
+                        if stats["ttft_ms_first"] is None:
+                            stats["ttft_ms_first"] = ttft
+                    stats["decode_ms_total"] += _num(
+                        timing.get("decode_ms"),
+                    )
+                usage = data.get("usage")
+                if isinstance(usage, dict):
+                    model = str(data.get("model") or "unknown")
+                    per_model = stats["models"].setdefault(
+                        model,
+                        {"calls": 0, "input_tokens": 0, "output_tokens": 0},
+                    )
+                    per_model["calls"] += 1
+                    per_model["input_tokens"] += int(
+                        _num(usage.get("input_tokens")),
+                    )
+                    per_model["output_tokens"] += int(
+                        _num(usage.get("output_tokens")),
+                    )
+                    stats["input_tokens"] += int(
+                        _num(usage.get("input_tokens")),
+                    )
+                    stats["output_tokens"] += int(
+                        _num(usage.get("output_tokens")),
+                    )
+                    stats["cache_read_tokens"] += int(
+                        _num(usage.get("cache_input_tokens")),
+                    )
+                    stats["cache_write_tokens"] += int(
+                        _num(usage.get("cache_creation_input_tokens")),
+                    )
+            elif event_type == EVENT_TOOL_RESULT:
+                stats["tool_calls"] += 1
+                stats["tool_ms_total"] += _num(data.get("duration_ms"))
+                if data.get("ok") is False or data.get("error"):
+                    stats["errors"] += 1
+        stats["total_tokens"] = (
+            stats["input_tokens"] + stats["output_tokens"]
+        )
+        stats["ttft_ms_avg"] = (
+            stats["ttft_ms_sum"] / ttft_count if ttft_count else None
+        )
+        for key in ("llm_ms_total", "tool_ms_total", "decode_ms_total"):
+            stats[key] = round(stats[key], 1)
+        stats["events"] = len(session["events"])
+        return stats
+
+    def lineage(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Root link plus spawned children for one session.
+
+        Spawn pointers live in the ROOT session's own file, so both
+        directions resolve from a single read; the root link comes
+        from the ``root_session_id`` recorded on sub-agent runs.
+        """
+        session = self.read_session(session_id)
+        if session is None:
+            return None
+        root: Optional[str] = None
+        children: List[Dict[str, Any]] = []
+        for event in session["events"]:
+            data = event.get("data") or {}
+            if not isinstance(data, dict):
+                continue
+            if event.get("type") == EVENT_RUN_START:
+                candidate = data.get("root_session_id")
+                if (
+                    isinstance(candidate, str)
+                    and candidate
+                    and candidate != session_id
+                ):
+                    root = candidate
+            elif event.get("type") == EVENT_AGENT_SPAWN:
+                child = data.get("child_session_id")
+                if isinstance(child, str) and child:
+                    children.append(
+                        {
+                            "child_session_id": child,
+                            "child_agent_id": data.get(
+                                "child_agent_id",
+                            ),
+                            "t": event.get("t"),
+                        },
+                    )
+        return {"root_session_id": root, "children": children}
+
     def _summarize_file(self, path: Path) -> Optional[Dict[str, Any]]:
         header: Optional[Dict[str, Any]] = None
         runs = 0
@@ -513,6 +655,15 @@ class TraceStore:
 
 
 STATUS_UNKNOWN = "unknown"
+
+
+def _num(value: Any) -> float:
+    """Numeric coercion for aggregation (non-numbers count as 0)."""
+    if isinstance(value, bool) or value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0.0
 
 
 def _unlink(path: Path) -> bool:

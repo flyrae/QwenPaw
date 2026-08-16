@@ -91,6 +91,65 @@ class TestSessions:
         assert len(body["sessions"]) == 1
         assert body["has_more"] is False
 
+    async def test_stats_and_lineage_endpoints(self, client, service):
+        service.store.append(
+            "sess-1",
+            "run/start",
+            "r1",
+            {"query": "hi"},
+            header={
+                "session_id": "sess-1",
+                "agent_id": "main",
+                "channel": "console",
+            },
+        )
+        service.store.append(
+            "sess-1",
+            "llm/result",
+            "r1",
+            {
+                "model": "m",
+                "text": "answer",
+                "duration_ms": 12.5,
+                "usage": {"input_tokens": 3, "output_tokens": 2},
+            },
+        )
+        service.store.append(
+            "sess-1",
+            "agent/spawn",
+            "r1",
+            {
+                "child_session_id": "sess-2",
+                "child_agent_id": "sub",
+                "child_trace_id": "r1",
+            },
+        )
+        service.store.append(
+            "sess-1",
+            "run/end",
+            "r1",
+            {"status": "success"},
+        )
+        await service.store.flush()
+
+        response = await client.get("/agent-trace/sessions/sess-1/stats")
+        assert response.status_code == 200
+        stats = response.json()
+        assert stats["llm_calls"] == 1
+        assert stats["llm_ms_total"] == 12.5
+        assert stats["total_tokens"] == 5
+
+        response = await client.get(
+            "/agent-trace/sessions/sess-1/lineage",
+        )
+        assert response.status_code == 200
+        lineage = response.json()
+        assert lineage["root_session_id"] is None
+        assert lineage["children"][0]["child_session_id"] == "sess-2"
+
+        response = await client.get("/agent-trace/sessions/none/stats")
+        assert response.status_code == 404
+
     async def test_filter_by_type_and_query(self, client, service):
         await seed_session(service)
         response = await client.get(
