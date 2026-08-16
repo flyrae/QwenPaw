@@ -787,6 +787,9 @@ class TestPluginEntry:
             def register_uninstall_hook(self, name, cb, priority=100):
                 calls["uninstall"].append((name, cb, priority))
 
+            def register_workspace_created_hook(self, name, cb, priority=100):
+                calls.setdefault("workspace_hooks", []).append(name)
+
         module.plugin.register(FakeApi())
 
         assert len(calls["runtime_hooks"]) == 6
