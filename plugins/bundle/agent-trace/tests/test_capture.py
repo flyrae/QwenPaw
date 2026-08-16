@@ -35,6 +35,7 @@ async def drained_events(service, session_id):
 
 class TestMessageHooks:
     async def test_inbound_records_content_parts(self, service, hook_ctx):
+        await AgentTraceRunStartHook().run(hook_ctx)
         part = SimpleNamespace(text="hello media")
         image = SimpleNamespace(image_url="http://x/y.png")
         message = SimpleNamespace(content=[part, image])
@@ -60,6 +61,7 @@ class TestMessageHooks:
             "sender_id": "u1",
             "chat_id": 42,
         }
+        assert inbound[0]["run_id"]  # tied to the active run
 
     async def test_inbound_disabled(self, service, hook_ctx):
         service.config.capture_messages = False

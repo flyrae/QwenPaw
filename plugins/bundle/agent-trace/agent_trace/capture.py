@@ -558,17 +558,20 @@ class AgentTraceRunStartHook(HookBase):
 
 
 class AgentTraceInboundHook(HookBase):
-    """Record the typed inbound content parts at PRE_DISPATCH.
+    """Record the typed inbound content parts at PRE_EXECUTE.
 
+    Runs right after the run opens (priority 15 > run_start's 14) so
+    the event carries the active run_id — at PRE_DISPATCH no run
+    exists yet and the event would be orphaned in the ledger fold.
     The raw native channel payload never reaches the runtime, but
     ``ctx.request.input`` carries typed content parts (text/image/
     audio/video/file) plus loosely-typed ``channel_meta`` — this is
     the dsh ``user/message`` counterpart.
     """
 
-    phase = Phase.PRE_DISPATCH
+    phase = Phase.PRE_EXECUTE
     name = "agent_trace_inbound"
-    priority = 16
+    priority = 15
 
     async def run(self, ctx: HookContext) -> HookResult:
         service = get_service()

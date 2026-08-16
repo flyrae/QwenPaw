@@ -50,6 +50,9 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   const pendingLlm = new Map<string, PendingCell[]>();
   const pendingTool = new Map<string, PendingCell[]>();
   const orphanCells = new Map<string, TrajectoryRecord[]>();
+  // Cells recorded before any run opened (empty run_id) — attached
+  // to the next run/start so they are never silently dropped.
+  const preRunCells: TrajectoryRecord[] = [];
   const promptBySha = new Map<string, string>();
   let index = 0;
   let runNumber = 0;
@@ -64,6 +67,10 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   };
 
   const appendCell = (runId: string, cell: TrajectoryRecord) => {
+    if (!runId) {
+      preRunCells.push(cell);
+      return;
+    }
     const turn = turnByRun.get(runId);
     if (turn) {
       cell.runIndex = turn.turn ?? 0;
@@ -94,6 +101,10 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         turnByRun.set(event.run_id, turn);
         turns.push(turn);
         attachOrphans(turn, event.run_id);
+        for (const cell of preRunCells.splice(0)) {
+          cell.runIndex = runNumber;
+          cellsOf(turn).push(cell);
+        }
         const messages = Array.isArray(data.messages)
           ? (data.messages as MessageDigest[])
           : [];
