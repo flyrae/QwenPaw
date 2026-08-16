@@ -53,6 +53,10 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   // Cells recorded before any run opened (empty run_id) — attached
   // to the next run/start so they are never silently dropped.
   const preRunCells: TrajectoryRecord[] = [];
+  // Session runs are sequential: remember the run currently open so
+  // cells with an unknown run_id (e.g. approval ids from older data)
+  // attach to it instead of being dropped or landing pre-run.
+  let openRunId = "";
   const promptBySha = new Map<string, string>();
   let index = 0;
   let runNumber = 0;
@@ -68,13 +72,25 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
 
   const appendCell = (runId: string, cell: TrajectoryRecord) => {
     if (!runId) {
-      preRunCells.push(cell);
-      return;
+      if (openRunId) {
+        runId = openRunId;
+      } else {
+        preRunCells.push(cell);
+        return;
+      }
     }
     const turn = turnByRun.get(runId);
     if (turn) {
       cell.runIndex = turn.turn ?? 0;
       cellsOf(turn).push(cell);
+    } else if (openRunId) {
+      const openTurn = turnByRun.get(openRunId);
+      if (openTurn) {
+        cell.runIndex = openTurn.turn ?? 0;
+        cellsOf(openTurn).push(cell);
+      } else {
+        pushOrphan(runId, cell);
+      }
     } else {
       pushOrphan(runId, cell);
     }
@@ -100,6 +116,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         };
         turnByRun.set(event.run_id, turn);
         turns.push(turn);
+        openRunId = event.run_id;
         attachOrphans(turn, event.run_id);
         for (const cell of preRunCells.splice(0)) {
           cell.runIndex = runNumber;
@@ -126,6 +143,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
       }
       case "run/end": {
         const turn = turnByRun.get(event.run_id);
+        if (openRunId === event.run_id) openRunId = "";
         const status = String(data.status ?? "unknown");
         if (turn) {
           turn.status = status;

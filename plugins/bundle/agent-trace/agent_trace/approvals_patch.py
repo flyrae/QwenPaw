@@ -20,9 +20,32 @@ logger = logging.getLogger("qwenpaw.plugins.agent_trace")
 
 _patched = False
 _originals: dict = {}
+# request_id -> run_id of the run that was active when the approval was
+# asked, so the decision event lands in the same run even when the
+# decision is made from a different request (e.g. root console session).
+_asked_run_by_request: dict = {}
 
 
-def _record(session_id: Any, event_type: str, data: dict) -> None:
+def _active_run_id(session_id: Any) -> str:
+    """Run id of the currently executing run, if it matches the file."""
+    from .context import get_current_run
+
+    run = get_current_run()
+    if run is None:
+        return ""
+    if isinstance(session_id, str) and run.session_id != session_id:
+        # Approval routed across sessions (e.g. root console deciding
+        # for a sub-agent) — fall back to the remembered ask-time run.
+        return ""
+    return run.trace_id
+
+
+def _record(
+    session_id: Any,
+    event_type: str,
+    data: dict,
+    run_id: str = "",
+) -> None:
     service = get_service()
     if service is None or not service.config.capture_approvals:
         return
@@ -32,7 +55,7 @@ def _record(session_id: Any, event_type: str, data: dict) -> None:
         service.store.append(
             session_id,
             event_type,
-            data.get("request_id") or "",
+            run_id,
             service.sanitize(data),
         )
     except Exception:  # pylint: disable=broad-except
@@ -64,10 +87,16 @@ def _pending_data(pending: Any) -> dict:
 async def _create_pending_wrapped(self, **kwargs: Any):  # noqa: ANN001
     pending = await _originals["create_pending"](self, **kwargs)
     try:
+        session_id = getattr(pending, "session_id", None)
+        run_id = _active_run_id(session_id)
+        request_id = getattr(pending, "request_id", "")
+        if run_id and request_id:
+            _asked_run_by_request[request_id] = run_id
         _record(
-            getattr(pending, "session_id", None),
+            session_id,
             ev.EVENT_APPROVAL_ASKED,
             _pending_data(pending),
+            run_id=run_id,
         )
     except Exception:  # pylint: disable=broad-except
         logger.debug("agent-trace: asked wrapper failed", exc_info=True)
@@ -89,14 +118,20 @@ async def _resolve_request_wrapped(  # noqa: ANN001
     try:
         if pending is None:
             return pending
+        session_id = getattr(pending, "session_id", None)
+        run_id = (
+            _asked_run_by_request.pop(request_id, None)
+            or _active_run_id(session_id)
+        )
         data = _pending_data(pending)
         data["decision"] = _decision_name(decision)
         if scope is not None:
             data["scope"] = str(getattr(scope, "value", scope))
         _record(
-            getattr(pending, "session_id", None),
+            session_id,
             ev.EVENT_APPROVAL_DECIDED,
             data,
+            run_id=run_id,
         )
     except Exception:  # pylint: disable=broad-except
         logger.debug(
@@ -121,6 +156,7 @@ async def _cancel_all_wrapped(self, root_session_id: str):  # noqa: ANN001
                     "count": count,
                     "root_session_id": root_session_id,
                 },
+                run_id=_active_run_id(root_session_id),
             )
     except Exception:  # pylint: disable=broad-except
         logger.debug("agent-trace: cancel wrapper failed", exc_info=True)
