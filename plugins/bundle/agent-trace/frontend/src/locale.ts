@@ -62,6 +62,7 @@ const STRINGS = {
     openChildSession: "打开子会话轨迹",
     exported: "已导出 JSONL",
     deleted: "已删除",
+    sessionTotal: "会话累计",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -125,6 +126,7 @@ const STRINGS = {
     openChildSession: "Open child session trace",
     exported: "JSONL exported",
     deleted: "Deleted",
+    sessionTotal: "session total",
   },
 } as const;
 

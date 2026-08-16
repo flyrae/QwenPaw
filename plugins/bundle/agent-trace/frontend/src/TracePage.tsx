@@ -11,6 +11,7 @@ import {
   exportSessionFile,
   fetchConfig,
   fetchSessionEvents,
+  fetchSessionStats,
   fetchSessionsPage,
   updateConfig,
   type SessionDetail,
@@ -186,6 +187,12 @@ export function TracePage() {
   );
   const [callsCollapsed, setCallsCollapsed] = useState(false);
   const [config, setConfig] = useState<TraceConfigUi | null>(null);
+  const [sessionTotals, setSessionTotals] = useState<{
+    sessionId: string;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selected;
@@ -286,8 +293,19 @@ export function TracePage() {
       setCollapsedTurns(new Set());
       setEventSearch("");
       void loadDetail(selected);
+      void fetchSessionStats(selected)
+        .then((stats) =>
+          setSessionTotals({
+            sessionId: selected,
+            inputTokens: stats.input_tokens,
+            outputTokens: stats.output_tokens,
+            totalTokens: stats.total_tokens,
+          }),
+        )
+        .catch(() => setSessionTotals(null));
     } else {
       setDetail(null);
+      setSessionTotals(null);
     }
   }, [selected, loadDetail]);
 
@@ -380,13 +398,17 @@ export function TracePage() {
     ];
     let inputTokens = 0;
     let outputTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheWriteTokens = 0;
     let ttftMs: number | null = null;
-    let decodeMs: number | null = null;
+    let decodeMs: number | null = 0;
     const errors: string[] = [];
     for (const cell of cells) {
       if (cell.usage) {
         inputTokens += cell.usage.input_tokens ?? 0;
         outputTokens += cell.usage.output_tokens ?? 0;
+        cacheReadTokens += cell.usage.cache_input_tokens ?? 0;
+        cacheWriteTokens += cell.usage.cache_creation_input_tokens ?? 0;
       }
       if (cell.timing) {
         ttftMs =
@@ -400,6 +422,8 @@ export function TracePage() {
       }
     }
     const userCell = cells.find((cell) => cell.kind === "user");
+    const lastOptions = [...llmCells].reverse().find((cell) => cell.options)
+      ?.options;
     return {
       turn: selectedTurn,
       status: turn.status,
@@ -411,11 +435,22 @@ export function TracePage() {
       models,
       inputTokens,
       outputTokens,
+      cacheReadTokens,
+      cacheWriteTokens,
       ttftMs,
       decodeMs,
       errors,
+      options: lastOptions,
+      sessionTotals:
+        sessionTotals && sessionTotals.sessionId === selected
+          ? {
+              inputTokens: sessionTotals.inputTokens,
+              outputTokens: sessionTotals.outputTokens,
+              totalTokens: sessionTotals.totalTokens,
+            }
+          : undefined,
     };
-  }, [selectedTurn, turns]);
+  }, [selectedTurn, turns, sessionTotals, selected]);
 
   const hasOlder = Boolean(
     detail && detail.events.length > 0 && detail.events[0].seq > 1,

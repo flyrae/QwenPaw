@@ -33,6 +33,27 @@ export interface SessionDetail {
   mtime: number;
 }
 
+export interface SessionStats {
+  runs: number;
+  llm_calls: number;
+  tool_calls: number;
+  errors: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  [key: string]: unknown;
+}
+
+export async function fetchSessionStats(
+  sessionId: string,
+): Promise<SessionStats> {
+  return requestJson<SessionStats>(
+    `/agent-trace/sessions/${encodeURIComponent(sessionId)}/stats`,
+  );
+}
+
 export interface TraceConfigUi {
   enabled: boolean;
   capture_llm: boolean;

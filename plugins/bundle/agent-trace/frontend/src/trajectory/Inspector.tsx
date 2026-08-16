@@ -41,9 +41,17 @@ export interface RequestSummary {
   models: string[];
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   ttftMs: number | null;
   decodeMs: number | null;
   errors: string[];
+  options?: Record<string, unknown>;
+  sessionTotals?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 }
 
 /** Token colors for the JSON highlighter (theme-neutral). */

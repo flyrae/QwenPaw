@@ -64,6 +64,8 @@ export interface TrajectoryRecord {
   headerReason?: string;
   sha?: string;
   prevSha?: string;
+  /* model-call options digest (from llm/call) */
+  options?: Record<string, unknown>;
   /* sub-agent spawn pointer */
   spawnSession?: string;
   spawnAgent?: string;

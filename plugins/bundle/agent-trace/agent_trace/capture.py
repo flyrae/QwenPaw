@@ -214,6 +214,40 @@ def _chunk_model(chunk: Any) -> Optional[str]:
 
 _DIGEST_TEXT_CHARS = 200
 
+_OPTION_KEYS = (
+    "temperature",
+    "top_p",
+    "top_k",
+    "max_tokens",
+    "stream",
+    "stop",
+    "presence_penalty",
+    "frequency_penalty",
+    "response_format",
+    "seed",
+)
+
+
+def _options_digest(input_kwargs: dict) -> dict:
+    """Sample-known model-call options for the request view."""
+    options: dict = {}
+    for key in _OPTION_KEYS:
+        value = input_kwargs.get(key)
+        if value is None or isinstance(value, (dict, list, tuple)):
+            if isinstance(value, (dict, list, tuple)):
+                try:
+                    options[key] = json.dumps(
+                        value,
+                        ensure_ascii=False,
+                        default=str,
+                    )[:200]
+                except (TypeError, ValueError):
+                    continue
+            continue
+        if isinstance(value, (bool, int, float, str)):
+            options[key] = value
+    return options
+
 
 def _messages_digest(messages: Any) -> list:
     """Compact role+text digest of the input messages of a model call."""
@@ -635,6 +669,7 @@ class TraceMiddleware(MiddlewareBase):
                 "messages_count": len(messages),
                 "last_user_text": _last_user_text(messages),
                 "messages": _messages_digest(messages),
+                "options": _options_digest(input_kwargs),
             },
         )
         start = time.perf_counter()

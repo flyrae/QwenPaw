@@ -266,6 +266,34 @@ class TestModelCall:
         assert result_ev["data"]["usage"]["input_tokens"] == 10
         assert result_ev["data"]["duration_ms"] >= 0
 
+    async def test_options_digest_recorded(self, service, hook_ctx):
+        await AgentTraceRunStartHook().run(hook_ctx)
+
+        async def next_handler(**kwargs):
+            return SimpleNamespace(text="a")
+
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={
+                "messages": [text_msg("user", "q")],
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "stream": True,
+                "tools": [{"name": "x"}],
+            },
+            next_handler=next_handler,
+        )
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        call = [e for e in events if e["type"] == "llm/call"][0]
+        options = call["data"]["options"]
+        assert options["temperature"] == 0.7
+        assert options["max_tokens"] == 4096
+        assert options["stream"] is True
+        # Unknown/bulky kwargs are not part of the digest.
+        assert "tools" not in options
+        assert "messages" not in options
+
     async def test_streaming_records_assembled_output(
         self,
         service,

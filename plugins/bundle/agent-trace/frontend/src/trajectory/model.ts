@@ -212,6 +212,12 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
       }
       case "llm/call": {
         const callData = dataOf(event);
+        const options =
+          callData.options &&
+          typeof callData.options === "object" &&
+          Object.keys(callData.options as object).length > 0
+            ? (callData.options as Record<string, unknown>)
+            : undefined;
         const cell: TrajectoryRecord = {
           index: ++index,
           runIndex: 0,
@@ -223,6 +229,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           isError: false,
           running: true,
           model: String(callData.model ?? "unknown"),
+          options,
         };
         appendCell(event.run_id, cell);
         const list = pendingLlm.get(event.run_id) ?? [];
