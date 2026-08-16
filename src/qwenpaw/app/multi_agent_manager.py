@@ -528,6 +528,17 @@ class MultiAgentManager:
             self.agents[agent_id] = new_instance
             logger.info(f"Workspace instance replaced: {agent_id}")
 
+        # Fire workspace_created hooks for the new instance so plugins that
+        # were hot-installed just before this reload still get their runtime
+        # hooks / skills / modes onto it (bootstrap_plugins only registers
+        # built-ins; the fresh-start path fires these hooks at creation).
+        await self._fire_workspace_created_hooks(
+            {
+                "agent_id": agent_id,
+                "workspace_dir": str(agent_ref.workspace_dir),
+            },
+        )
+
         # A reusable service can be rejected during startup when its class no
         # longer matches the newly loaded configuration (for example, after a
         # memory backend switch).  The old workspace must retain it for any
