@@ -81,7 +81,9 @@ class TraceService:
     async def start(self) -> None:
         """Recover torn runs, launch the flush task, enforce retention."""
         self.store.start()
-        recovered = self.store.recover_interrupted_runs()
+        recovered = await asyncio.to_thread(
+            self.store.recover_interrupted_runs,
+        )
         if recovered:
             await self.store.flush()
             logger.info(
@@ -105,7 +107,7 @@ class TraceService:
                 )
 
     async def _cleanup_once(self) -> None:
-        removed = self.store.cleanup()
+        removed = await asyncio.to_thread(self.store.cleanup)
         for session_id in removed:
             self._header_sha_by_session.pop(session_id, None)
         if removed:

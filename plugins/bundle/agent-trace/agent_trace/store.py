@@ -18,6 +18,7 @@ import json
 import logging
 import re
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -122,7 +123,11 @@ class TraceStore:
             if session is None:
                 continue
             open_runs: list = []
+            last_seq = 0
             for event in session["events"]:
+                seq = event.get("seq")
+                if isinstance(seq, int) and seq > last_seq:
+                    last_seq = seq
                 run_id = event.get("run_id")
                 if event.get("type") == EVENT_RUN_START:
                     if run_id:
@@ -130,6 +135,11 @@ class TraceStore:
                 elif event.get("type") == EVENT_RUN_END:
                     if run_id in open_runs:
                         open_runs.remove(run_id)
+            # Prime the seq cache so the first append in this process
+            # never needs the full-file _peek_last_seq scan.
+            if session_id not in self._next_seq and last_seq:
+                self._next_seq[session_id] = last_seq + 1
+            self._known_files.add(session_id)
             for run_id in open_runs:
                 try:
                     self.append(
@@ -318,24 +328,57 @@ class TraceStore:
     ) -> Optional[Dict[str, Any]]:
         """Read a window of events in ascending ``seq`` order.
 
-        Without ``before_seq`` the *last* ``limit`` events are returned
-        (tail page); with it, the ``limit`` events immediately before
-        that seq — enabling "load older" pagination.
+        Streams the file once and keeps only the target window in
+        memory (bounded by ``limit``), so paging a huge session does
+        not load the whole log. Without ``before_seq`` the *last*
+        ``limit`` events are returned (tail page); with it, the
+        ``limit`` events immediately before that seq — enabling
+        "load older" pagination.
         """
-        session = self.read_session(session_id)
-        if session is None:
+        try:
+            path = self._path(session_id)
+        except ValueError:
             return None
-        events = session["events"]
-        if before_seq is not None:
-            events = [e for e in events if e["seq"] < before_seq]
-        if limit and limit > 0:
-            events = events[-limit:]
+        if not path.exists():
+            return None
+        header: Optional[Dict[str, Any]] = None
+        total = 0
+        window: deque = (
+            deque(maxlen=limit) if limit and limit > 0 else deque()
+        )
+        try:
+            with open(path, encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        # Torn tail line from a crash; skip it.
+                        continue
+                    if not isinstance(record, dict):
+                        continue
+                    if record.get("type") == SESSION_HEADER_TYPE:
+                        if header is None:
+                            header = record
+                        continue
+                    if not isinstance(record.get("seq"), int):
+                        continue
+                    total += 1
+                    if before_seq is not None:
+                        if record["seq"] >= before_seq:
+                            continue
+                    window.append(record)
+        except OSError:
+            return None
+        stat = path.stat()
         return {
-            "header": session["header"],
-            "events": events,
-            "total_events": len(session["events"]),
-            "size_bytes": session["size_bytes"],
-            "mtime": session["mtime"],
+            "header": header,
+            "events": list(window),
+            "total_events": total,
+            "size_bytes": stat.st_size,
+            "mtime": stat.st_mtime,
         }
 
     def list_sessions(self) -> List[Dict[str, Any]]:

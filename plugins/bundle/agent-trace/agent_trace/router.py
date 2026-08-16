@@ -2,6 +2,7 @@
 """REST API for browsing, exporting, and managing trace sessions."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -44,7 +45,9 @@ def build_router() -> APIRouter:
         offset: int = Query(default=0, ge=0),
     ) -> Dict[str, Any]:
         service = _require_service()
-        sessions = service.store.list_sessions()
+        sessions = await asyncio.to_thread(
+            service.store.list_sessions,
+        )
         window = sessions[offset : offset + limit]
         return {
             "sessions": window,
@@ -63,7 +66,10 @@ def build_router() -> APIRouter:
     ) -> Dict[str, Any]:
         service = _require_service()
         _validate_session_id(session_id)
-        result = service.store.read_session(session_id)
+        result = await asyncio.to_thread(
+            service.store.read_session,
+            session_id,
+        )
         if result is None:
             raise HTTPException(status_code=404, detail="not found")
         events = result["events"]
@@ -98,7 +104,10 @@ def build_router() -> APIRouter:
         """Whole-log statistics fold (durations, TTFT, tokens, models)."""
         service = _require_service()
         _validate_session_id(session_id)
-        stats = service.store.compute_stats(session_id)
+        stats = await asyncio.to_thread(
+            service.store.compute_stats,
+            session_id,
+        )
         if stats is None:
             raise HTTPException(status_code=404, detail="not found")
         return stats
@@ -108,7 +117,10 @@ def build_router() -> APIRouter:
         """Root session link plus spawned child sessions."""
         service = _require_service()
         _validate_session_id(session_id)
-        lineage = service.store.lineage(session_id)
+        lineage = await asyncio.to_thread(
+            service.store.lineage,
+            session_id,
+        )
         if lineage is None:
             raise HTTPException(status_code=404, detail="not found")
         return lineage

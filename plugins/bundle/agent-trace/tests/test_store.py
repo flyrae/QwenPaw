@@ -340,6 +340,18 @@ class TestRecovery:
         assert store2.recover_interrupted_runs() == 0
 
 
+    async def test_recovery_primes_seq_cache(self, tmp_path):
+        store = make_store(tmp_path)
+        await write_run(store, "s")  # seq 1..4
+        await store.flush()
+        store2 = make_store(tmp_path)
+        store2.recover_interrupted_runs()
+        # The recovery read primes the seq cache, so the first append
+        # never needs the full-file _peek_last_seq scan.
+        assert store2._next_seq["s"] == 5
+        assert store2.append("s", "run/start", "r9", {}) == 5
+
+
 class TestDeleteRace:
     async def test_deleted_session_drops_stragglers_until_new_run(
         self,
