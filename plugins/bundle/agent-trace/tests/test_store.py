@@ -339,7 +339,6 @@ class TestRecovery:
         store2 = make_store(tmp_path)
         assert store2.recover_interrupted_runs() == 0
 
-
     async def test_recovery_primes_seq_cache(self, tmp_path):
         store = make_store(tmp_path)
         await write_run(store, "s")  # seq 1..4

@@ -30,17 +30,21 @@ _expose_package_dir()
 
 
 async def _on_startup() -> None:
+    from agent_trace.approvals_patch import apply_approval_patch
     from agent_trace.service import get_service
 
     service = get_service()
     if service is not None:
         await service.start()
         logger.info("agent-trace: recording to %s", service.root)
+    apply_approval_patch()
 
 
 async def _on_shutdown() -> None:
+    from agent_trace.approvals_patch import restore_approval_patch
     from agent_trace.service import get_service
 
+    restore_approval_patch()
     service = get_service()
     if service is not None:
         await service.shutdown()
@@ -48,9 +52,11 @@ async def _on_shutdown() -> None:
 
 
 async def _on_uninstall(plugin_id: str, delete_files: bool) -> None:
+    from agent_trace.approvals_patch import restore_approval_patch
     from agent_trace.service import get_service, set_service
 
     del plugin_id
+    restore_approval_patch()
     service = get_service()
     if service is None:
         return
@@ -71,6 +77,8 @@ class AgentTracePlugin:
         from agent_trace.capture import (
             AgentTraceErrorHook,
             AgentTraceFinalizeHook,
+            AgentTraceInboundHook,
+            AgentTraceReplyHook,
             AgentTraceRunEndHook,
             AgentTraceRunStartHook,
             trace_middleware_factory,
@@ -84,6 +92,8 @@ class AgentTracePlugin:
             set_service(TraceService())
 
         api.register_runtime_hook(AgentTraceRunStartHook())
+        api.register_runtime_hook(AgentTraceInboundHook())
+        api.register_runtime_hook(AgentTraceReplyHook())
         api.register_runtime_hook(AgentTraceRunEndHook())
         api.register_runtime_hook(AgentTraceErrorHook())
         api.register_runtime_hook(AgentTraceFinalizeHook())

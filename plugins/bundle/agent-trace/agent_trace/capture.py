@@ -113,6 +113,20 @@ def _request_trigger(request: Any) -> str:
     return ""
 
 
+def _channel_meta_digest(request: Any) -> dict:
+    """Compact digest of the loosely-typed ``channel_meta`` extra."""
+    meta = getattr(request, "channel_meta", None)
+    if not isinstance(meta, dict):
+        return {}
+    digest = {}
+    for key, value in meta.items():
+        if isinstance(value, (bool, int, float, str)):
+            digest[str(key)] = value
+        elif isinstance(value, (list, tuple)):
+            digest[str(key)] = len(value)
+    return digest
+
+
 def _model_name(agent: Any, input_kwargs: dict) -> str:
     """Best-effort model label for an ``on_model_call`` invocation."""
     for candidate in (
@@ -540,6 +554,113 @@ class AgentTraceRunStartHook(HookBase):
                     "agent-trace: spawn pointer append failed",
                     exc_info=True,
                 )
+        return HookResult()
+
+
+class AgentTraceInboundHook(HookBase):
+    """Record the typed inbound content parts at PRE_DISPATCH.
+
+    The raw native channel payload never reaches the runtime, but
+    ``ctx.request.input`` carries typed content parts (text/image/
+    audio/video/file) plus loosely-typed ``channel_meta`` — this is
+    the dsh ``user/message`` counterpart.
+    """
+
+    phase = Phase.PRE_DISPATCH
+    name = "agent_trace_inbound"
+    priority = 16
+
+    async def run(self, ctx: HookContext) -> HookResult:
+        service = get_service()
+        if service is None or not service.enabled:
+            return HookResult()
+        if not service.config.capture_messages:
+            return HookResult()
+        run = get_current_run()
+        trace_id = run.trace_id if run is not None else ""
+        session_id = ctx.session_id or ""
+        if not session_id:
+            return HookResult()
+        parts = []
+        try:
+            inputs = list(getattr(ctx.request, "input", None) or [])
+            for message in inputs:
+                for item in getattr(message, "content", None) or []:
+                    entry = {"type": type(item).__name__}
+                    for attr in ("text", "image_url", "video_url"):
+                        value = getattr(item, attr, None)
+                        if isinstance(value, str) and value:
+                            entry[attr] = value
+                            break
+                    else:
+                        filename = getattr(item, "filename", None)
+                        if isinstance(filename, str) and filename:
+                            entry["filename"] = filename
+                    parts.append(entry)
+        except Exception:  # pylint: disable=broad-except
+            logger.debug(
+                "agent-trace: inbound extraction failed",
+                exc_info=True,
+            )
+        if not parts:
+            return HookResult()
+        _safe_append(
+            TraceRun(
+                trace_id=trace_id,
+                session_id=session_id,
+                agent_id=ctx.agent_id or "",
+            ),
+            ev.EVENT_MSG_IN,
+            {
+                "parts": parts,
+                "channel_meta": _channel_meta_digest(ctx.request),
+            },
+        )
+        return HookResult()
+
+
+class AgentTraceReplyHook(HookBase):
+    """Record the final assistant reply at POST_RESPONSE.
+
+    Reads the last assistant Msg from ``ctx.agent.state.context`` —
+    the same access path the runtime itself uses. This is the dsh
+    outbound-message counterpart short of the per-channel send path
+    (which has no plugin seam).
+    """
+
+    phase = Phase.POST_RESPONSE
+    # After session_save(90) so persisted and in-memory views agree.
+    name = "agent_trace_reply"
+    priority = 95
+
+    async def run(self, ctx: HookContext) -> HookResult:
+        service = get_service()
+        if service is None or not service.enabled:
+            return HookResult()
+        if not service.config.capture_messages:
+            return HookResult()
+        run = get_current_run()
+        if run is None or run.ended:
+            return HookResult()
+        state = getattr(ctx.agent, "state", None)
+        context = getattr(state, "context", None) if state else None
+        if not context:
+            return HookResult()
+        reply = None
+        for message in reversed(list(context)):
+            if getattr(message, "role", None) == "assistant":
+                reply = message
+                break
+        if reply is None:
+            return HookResult()
+        _safe_append(
+            run,
+            ev.EVENT_MSG_OUT,
+            {
+                "text": _block_texts(getattr(reply, "content", None)),
+                "agent_id": run.agent_id,
+            },
+        )
         return HookResult()
 
 

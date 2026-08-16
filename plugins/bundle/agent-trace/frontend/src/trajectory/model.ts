@@ -172,6 +172,77 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         });
         break;
       }
+      case "message/inbound": {
+        const parts = Array.isArray(data.parts)
+          ? (data.parts as Record<string, unknown>[])
+          : [];
+        const kinds = parts
+          .map((part) => String(part.type ?? "?").replace("Content", ""))
+          .join(",");
+        appendCell(event.run_id, {
+          index: ++index,
+          runIndex: 0,
+          runId: event.run_id,
+          kind: "system",
+          text: `📥 ${parts.length} part(s)${kinds ? ` [${kinds}]` : ""}`,
+          timeSeconds: 0,
+          startedAt: epochMs(event.t),
+          isError: false,
+          running: false,
+          raw: [event as unknown as Record<string, unknown>],
+        });
+        break;
+      }
+      case "message/outbound": {
+        const text2 = typeof data.text === "string" ? data.text : "";
+        appendCell(event.run_id, {
+          index: ++index,
+          runIndex: 0,
+          runId: event.run_id,
+          kind: "system",
+          text: `📤 ${firstLine(text2) || "(empty)"}`,
+          timeSeconds: 0,
+          startedAt: epochMs(event.t),
+          isError: false,
+          running: false,
+          outputText: text2 || undefined,
+          raw: [event as unknown as Record<string, unknown>],
+        });
+        break;
+      }
+      case "approval/asked": {
+        appendCell(event.run_id, {
+          index: ++index,
+          runIndex: 0,
+          runId: event.run_id,
+          kind: "system",
+          text: `🛡 approval asked: ${String(data.tool_name ?? "?")}`,
+          timeSeconds: 0,
+          startedAt: epochMs(event.t),
+          isError: false,
+          running: false,
+          raw: [event as unknown as Record<string, unknown>],
+        });
+        break;
+      }
+      case "approval/decided": {
+        const decision = String(data.decision ?? "?");
+        appendCell(event.run_id, {
+          index: ++index,
+          runIndex: 0,
+          runId: event.run_id,
+          kind: "system",
+          text: `🛡 approval ${decision}${
+            data.tool_name ? `: ${String(data.tool_name)}` : ""
+          }`,
+          timeSeconds: 0,
+          startedAt: epochMs(event.t),
+          isError: decision === "denied",
+          running: false,
+          raw: [event as unknown as Record<string, unknown>],
+        });
+        break;
+      }
       case "llm/header": {
         const sha = typeof data.sha256 === "string" ? data.sha256 : "";
         const prevSha =

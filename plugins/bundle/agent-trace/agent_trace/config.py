@@ -34,6 +34,8 @@ class TraceConfig:
     capture_llm: bool = True
     capture_tools: bool = True
     capture_headers: bool = True
+    capture_approvals: bool = True
+    capture_messages: bool = True
     max_payload_chars: int = 4000
     max_prompt_chars: int = 200_000
     redact_patterns: List[str] = field(default_factory=list)
@@ -48,6 +50,8 @@ class TraceConfig:
             "capture_llm": self.capture_llm,
             "capture_tools": self.capture_tools,
             "capture_headers": self.capture_headers,
+            "capture_approvals": self.capture_approvals,
+            "capture_messages": self.capture_messages,
             "max_payload_chars": self.max_payload_chars,
             "max_prompt_chars": self.max_prompt_chars,
             "redact_patterns": list(self.redact_patterns),
@@ -65,6 +69,8 @@ class TraceConfig:
             "capture_llm",
             "capture_tools",
             "capture_headers",
+            "capture_approvals",
+            "capture_messages",
         )
         for key in header_keys:
             if key in payload:

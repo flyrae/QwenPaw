@@ -16,6 +16,8 @@ from agentscope.tool import ToolResponse
 from agent_trace.capture import (
     AgentTraceErrorHook,
     AgentTraceFinalizeHook,
+    AgentTraceInboundHook,
+    AgentTraceReplyHook,
     AgentTraceRunEndHook,
     AgentTraceRunStartHook,
     TraceMiddleware,
@@ -29,6 +31,92 @@ async def drained_events(service, session_id):
     result = service.store.read_events(session_id)
     assert result is not None
     return result["events"]
+
+
+class TestMessageHooks:
+    async def test_inbound_records_content_parts(self, service, hook_ctx):
+        part = SimpleNamespace(text="hello media")
+        image = SimpleNamespace(image_url="http://x/y.png")
+        message = SimpleNamespace(content=[part, image])
+        hook_ctx.request = SimpleNamespace(
+            channel="feishu",
+            channel_meta={"sender_id": "u1", "chat_id": 42},
+            input=[message],
+        )
+        await AgentTraceInboundHook().run(hook_ctx)
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        inbound = [
+            e for e in events if e["type"] == "message/inbound"
+        ]
+        assert len(inbound) == 1
+        data = inbound[0]["data"]
+        assert data["parts"][0] == {
+            "type": "SimpleNamespace",
+            "text": "hello media",
+        }
+        assert data["parts"][1]["image_url"] == "http://x/y.png"
+        assert data["channel_meta"] == {
+            "sender_id": "u1",
+            "chat_id": 42,
+        }
+
+    async def test_inbound_disabled(self, service, hook_ctx):
+        service.config.capture_messages = False
+        hook_ctx.request = SimpleNamespace(
+            channel="console",
+            input=[
+                SimpleNamespace(content=[SimpleNamespace(text="x")]),
+            ],
+        )
+        await AgentTraceInboundHook().run(hook_ctx)
+        await service.store.flush()
+        assert service.store.read_events("sess-1") is None
+
+    async def test_reply_records_last_assistant_message(
+        self,
+        service,
+        hook_ctx,
+    ):
+        await AgentTraceRunStartHook().run(hook_ctx)
+        reply = SimpleNamespace(
+            role="assistant",
+            content=[TextBlock(type="text", text="final answer")],
+        )
+        hook_ctx.agent = SimpleNamespace(
+            state=SimpleNamespace(
+                context=[
+                    SimpleNamespace(role="user", content="q"),
+                    reply,
+                ],
+            ),
+        )
+        await AgentTraceReplyHook().run(hook_ctx)
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        outbound = [
+            e for e in events if e["type"] == "message/outbound"
+        ]
+        assert len(outbound) == 1
+        assert outbound[0]["data"]["text"] == "final answer"
+
+    async def test_reply_skips_without_assistant_message(
+        self,
+        service,
+        hook_ctx,
+    ):
+        await AgentTraceRunStartHook().run(hook_ctx)
+        hook_ctx.agent = SimpleNamespace(
+            state=SimpleNamespace(
+                context=[SimpleNamespace(role="user", content="q")],
+            ),
+        )
+        await AgentTraceReplyHook().run(hook_ctx)
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        assert not [
+            e for e in events if e["type"] == "message/outbound"
+        ]
 
 
 class TestRunHooks:
@@ -699,10 +787,12 @@ class TestPluginEntry:
 
         module.plugin.register(FakeApi())
 
-        assert len(calls["runtime_hooks"]) == 4
+        assert len(calls["runtime_hooks"]) == 6
         names = {h.name for h in calls["runtime_hooks"]}
         assert names == {
             "agent_trace_run_start",
+            "agent_trace_inbound",
+            "agent_trace_reply",
             "agent_trace_run_end",
             "agent_trace_error",
             "agent_trace_finalize",
