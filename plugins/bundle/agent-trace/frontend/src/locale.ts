@@ -46,10 +46,6 @@ const STRINGS = {
     searchEvents: "搜索事件",
     projectionHint:
       "时间线投影：顺序（等宽）/ 时长（压缩空闲）/ 时刻（记录时间点）/ 实际（完整墙钟）",
-    modeSequence: "顺序",
-    modeDuration: "时长",
-    modeTime: "时刻",
-    modeActual: "实际",
     collapseAll: "折叠全部请求",
     expandAll: "展开全部请求",
     promptInitial: "初始系统提示词",
@@ -65,6 +61,12 @@ const STRINGS = {
     sessionTotal: "会话累计",
     collapseSidebar: "收起会话列表",
     expandSidebar: "展开会话列表",
+    statRounds: "轮",
+    statSteps: "步",
+    statTtftAvg: "首 token 平均",
+    statCacheHit: "缓存命中",
+    statInput: "输入",
+    statOutput: "输出",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -112,10 +114,6 @@ const STRINGS = {
     searchEvents: "Search events",
     projectionHint:
       "Timeline projection: Sequence (equal width) / Duration (idle-compressed) / Time (recorded instants) / Actual (full wall clock)",
-    modeSequence: "Sequence",
-    modeDuration: "Duration",
-    modeTime: "Time",
-    modeActual: "Actual",
     collapseAll: "Collapse all requests",
     expandAll: "Expand all requests",
     promptInitial: "Initial system prompt",
@@ -131,6 +129,12 @@ const STRINGS = {
     sessionTotal: "session total",
     collapseSidebar: "Collapse session list",
     expandSidebar: "Expand session list",
+    statRounds: "rounds",
+    statSteps: "steps",
+    statTtftAvg: "Avg first token",
+    statCacheHit: "Cache hit",
+    statInput: "In",
+    statOutput: "Out",
   },
 } as const;
 

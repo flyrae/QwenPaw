@@ -45,6 +45,11 @@ export interface SessionStats {
   total_tokens: number;
   cache_read_tokens: number;
   cache_write_tokens: number;
+  llm_ms_total: number;
+  tool_ms_total: number;
+  decode_ms_total: number;
+  ttft_ms_avg: number | null;
+  ttft_ms_first: number | null;
   [key: string]: unknown;
 }
 

@@ -15,12 +15,18 @@ import {
   fetchSessionsPage,
   updateConfig,
   type SessionDetail,
+  type SessionStats,
   type SessionSummary,
   type TraceConfigUi,
 } from "./traceApi";
 import { Inspector } from "./trajectory/Inspector";
 import type { RequestSummary } from "./trajectory/Inspector";
 import { Ledger } from "./trajectory/Ledger";
+import {
+  formatSeconds,
+  formatThroughput,
+  formatTokens,
+} from "./trajectory/records";
 import {
   buildTurns,
   splitInitialHeader,
@@ -313,7 +319,10 @@ function SettingsPopover({
 export function TracePage() {
   const hostLocale =
     typeof host.useLocale === "function" ? host.useLocale() : undefined;
-  const locale = useMemo(() => resolveLocale(hostLocale ?? null), [hostLocale]);
+  const locale = useMemo(
+    () => resolveLocale(hostLocale ?? storedLocale()),
+    [hostLocale],
+  );
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [sessionsHasMore, setSessionsHasMore] = useState(false);
   const [collapsedAgents, setCollapsedAgents] = useState<ReadonlySet<string>>(
@@ -342,6 +351,7 @@ export function TracePage() {
     outputTokens: number;
     totalTokens: number;
   } | null>(null);
+  const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selected;
@@ -443,17 +453,22 @@ export function TracePage() {
       setEventSearch("");
       void loadDetail(selected);
       void fetchSessionStats(selected)
-        .then((stats) =>
+        .then((stats) => {
+          setSessionStats(stats);
           setSessionTotals({
             sessionId: selected,
             inputTokens: stats.input_tokens,
             outputTokens: stats.output_tokens,
             totalTokens: stats.total_tokens,
-          }),
-        )
-        .catch(() => setSessionTotals(null));
+          });
+        })
+        .catch(() => {
+          setSessionStats(null);
+          setSessionTotals(null);
+        });
     } else {
       setDetail(null);
+      setSessionStats(null);
       setSessionTotals(null);
     }
   }, [selected, loadDetail]);
@@ -641,15 +656,63 @@ export function TracePage() {
     }
   };
 
+  // Projection mode labels stay in English (Sequence/Duration/Time/Actual)
+  // per product preference — the Chinese translations read awkwardly.
   const modeOptions = useMemo(
     () => [
-      { label: t(locale, "modeSequence"), value: "sequence" as const },
-      { label: t(locale, "modeDuration"), value: "duration" as const },
-      { label: t(locale, "modeTime"), value: "time" as const },
-      { label: t(locale, "modeActual"), value: "actual" as const },
+      { label: "Sequence", value: "sequence" as const },
+      { label: "Duration", value: "duration" as const },
+      { label: "Time", value: "time" as const },
+      { label: "Actual", value: "actual" as const },
     ],
-    [locale],
+    [],
   );
+
+  // dsh-style session stats strip: rounds · steps | LLM/tool wall time |
+  // avg TTFT · throughput | cache hit % | input/output tokens.
+  const statsStrip = useMemo(() => {
+    if (!sessionStats) return null;
+    const parts: string[] = [
+      `${sessionStats.runs} ${t(locale, "statRounds")} · ${
+        sessionStats.llm_calls
+      } ${t(locale, "statSteps")}`,
+      `LLM ${formatSeconds(sessionStats.llm_ms_total / 1000)} · ${t(
+        locale,
+        "toolCalls",
+      )} ${formatSeconds(sessionStats.tool_ms_total / 1000)}`,
+      `${t(locale, "statTtftAvg")} ${
+        sessionStats.ttft_ms_avg === null
+          ? "-"
+          : formatSeconds(sessionStats.ttft_ms_avg / 1000)
+      } · ${formatThroughput(
+        sessionStats.output_tokens,
+        sessionStats.decode_ms_total / 1000,
+      )}`,
+    ];
+    if (
+      sessionStats.cache_read_tokens > 0 ||
+      sessionStats.cache_write_tokens > 0
+    ) {
+      const cacheBase =
+        sessionStats.cache_read_tokens + sessionStats.input_tokens;
+      const hit =
+        cacheBase > 0
+          ? Math.round((sessionStats.cache_read_tokens / cacheBase) * 100)
+          : 0;
+      parts.push(`${t(locale, "statCacheHit")} ${hit}%`);
+    }
+    parts.push(
+      `${t(locale, "statInput")} ${formatTokens(
+        sessionStats.input_tokens,
+      )} tok · ${t(locale, "statOutput")} ${formatTokens(
+        sessionStats.output_tokens,
+      )} tok`,
+    );
+    if (selectedSummary) {
+      parts.push(formatBytes(selectedSummary.size_bytes));
+    }
+    return parts.join(" | ");
+  }, [sessionStats, selectedSummary, locale]);
 
   return (
     <div style={{ display: "flex", height: "100%", minHeight: 0 }}>
@@ -790,17 +853,20 @@ export function TracePage() {
             flexWrap: "wrap",
           }}
         >
-          {selectedSummary ? (
+          {statsStrip ? (
             <Text type="secondary" style={{ fontSize: 12 }}>
-              {`${selectedSummary.runs} ${t(locale, "runs")} · ${
+              {statsStrip}
+            </Text>
+          ) : selectedSummary ? (
+            // Transient line while the stats endpoint responds.
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {`${selectedSummary.runs} ${t(locale, "statRounds")} · ${
                 selectedSummary.llm_calls
-              } ${t(locale, "llmCalls")} · ${selectedSummary.tool_calls} ${t(
-                locale,
-                "toolCalls",
-              )} · ${formatCount(selectedSummary.total_tokens)} ${t(
-                locale,
-                "tokens",
-              )} · ${formatBytes(selectedSummary.size_bytes)}`}
+              } ${t(locale, "statSteps")} · ${formatCount(
+                selectedSummary.total_tokens,
+              )} ${t(locale, "tokens")} · ${formatBytes(
+                selectedSummary.size_bytes,
+              )}`}
             </Text>
           ) : (
             <Text type="secondary" style={{ fontSize: 13 }}>
@@ -933,6 +999,10 @@ export function TracePage() {
                 focusIndexes={focusIndexes}
                 searchMatchIndexes={searchMatchIndexes}
                 onSelectedIndexChange={(index) => {
+                  if (index === selectedIndex) {
+                    setSelectedIndex(null);
+                    return;
+                  }
                   setSelectedIndex(index);
                   setSelectedTurn(null);
                 }}
@@ -963,15 +1033,21 @@ export function TracePage() {
                 initialRecord={initialHeader}
               />
             </div>
-            <Inspector
-              record={selectedRecord}
-              request={requestSummary}
-              onJumpSession={setSelected}
-              onSelectTurn={(turn) => {
-                setSelectedTurn(turn);
-                setSelectedIndex(null);
-              }}
-            />
+            {(selectedRecord !== null || requestSummary !== null) && (
+              <Inspector
+                record={selectedRecord}
+                request={requestSummary}
+                onJumpSession={setSelected}
+                onSelectTurn={(turn) => {
+                  setSelectedTurn(turn);
+                  setSelectedIndex(null);
+                }}
+                onClose={() => {
+                  setSelectedIndex(null);
+                  setSelectedTurn(null);
+                }}
+              />
+            )}
           </div>
         )}
       </div>

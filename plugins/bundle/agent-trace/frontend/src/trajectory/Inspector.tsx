@@ -24,7 +24,7 @@ const React: typeof ReactNS = host.React;
 const { useEffect, useRef, useState } = React;
 const { Button, Collapse, Empty, Tabs } = host.antd;
 const { Text } = host.antd.Typography;
-const { CopyOutlined } = host.antdIcons;
+const { CopyOutlined, CloseOutlined } = host.antdIcons;
 
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 720;
@@ -185,6 +185,7 @@ export interface InspectorProps {
   request: RequestSummary | null;
   onJumpSession?: (sessionId: string) => void;
   onSelectTurn?: (turn: number) => void;
+  onClose?: () => void;
 }
 
 function RequestInspector({ request }: { request: RequestSummary }) {
@@ -494,11 +495,26 @@ function ResizeHandle({ dragRef, width }: { dragRef: DragRef; width: number }) {
 }
 
 /** Resizable detail pane for the selected record or request. */
+function CloseButton({ onClose }: { onClose?: () => void }) {
+  if (!onClose) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <Button
+        size="small"
+        type="text"
+        icon={<CloseOutlined />}
+        onClick={onClose}
+      />
+    </div>
+  );
+}
+
 export function Inspector({
   record,
   request,
   onJumpSession,
   onSelectTurn,
+  onClose,
 }: InspectorProps) {
   const locale = storedLocale();
   const [width, setWidth] = useState(400);
@@ -558,6 +574,7 @@ export function Inspector({
       >
         <ResizeHandle dragRef={dragRef} width={width} />
         <div style={{ padding: "8px 12px 0", overflow: "auto" }}>
+          <CloseButton onClose={onClose} />
           <RequestInspector request={request} />
         </div>
       </aside>
@@ -580,6 +597,7 @@ export function Inspector({
       >
         <ResizeHandle dragRef={dragRef} width={width} />
         <div style={{ padding: "8px 12px 0", overflow: "auto" }}>
+          <CloseButton onClose={onClose} />
           <HeaderInspector record={selected} />
         </div>
       </aside>
@@ -846,6 +864,7 @@ export function Inspector({
     >
       <ResizeHandle dragRef={dragRef} width={width} />
       <div style={{ padding: "8px 12px 0", overflow: "auto" }}>
+        <CloseButton onClose={onClose} />
         <Tabs size="small" items={items} tabBarStyle={{ marginBottom: 8 }} />
       </div>
     </aside>
