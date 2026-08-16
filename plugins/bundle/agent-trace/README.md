@@ -131,3 +131,21 @@ Install from source:
 qwenpaw plugin install plugins/bundle/agent-trace
 # or copy/symlink the directory to ~/.qwenpaw/plugins/agent-trace
 ```
+
+## Updating after changes
+
+Frontend-only changes (no restart needed):
+
+```bash
+cd plugins/bundle/agent-trace/frontend
+npm run build        # build + guards (icons / bare imports / smoke import)
+cd <repo root>
+qwenpaw plugin install plugins/bundle/agent-trace --force
+# then hard-refresh the Console (Ctrl+Shift+R)
+```
+
+Any backend change (`agent_trace/` or `plugin.py`) additionally needs a
+**QwenPaw restart** after the `--force` install: the host's hot
+reinstall does not remove old hooks from workspace registries, so
+capture stays disconnected until the cold-start path re-registers
+everything (API and frontend changes do take effect immediately).
