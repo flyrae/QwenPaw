@@ -179,6 +179,34 @@ def _blocks_tool_calls(content: Any) -> list:
     return calls
 
 
+def _reasoning_tokens(usage: Any) -> Optional[int]:
+    """Best-effort reasoning-token extraction from usage metadata.
+
+    Providers nest it differently (OpenAI-style
+    ``completion_tokens_details.reasoning_tokens``); a couple of
+    defensive shapes are tried so cost analysis can split
+    reasoning vs content tokens (dsh UsageRows parity).
+    """
+    metadata = getattr(usage, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    candidates = [
+        metadata.get("reasoning_tokens"),
+    ]
+    for key in ("completion_tokens_details", "output_tokens_details"):
+        nested = metadata.get(key)
+        if isinstance(nested, dict):
+            candidates.append(nested.get("reasoning_tokens"))
+    for value in candidates:
+        if (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and value > 0
+        ):
+            return value
+    return None
+
+
 def _usage_dict(usage: Any) -> Optional[dict]:
     """Normalize a ChatUsage object (or plain dict) for persistence."""
     if usage is None:
@@ -213,6 +241,11 @@ def _usage_dict(usage: Any) -> Optional[dict]:
             and value
         ):
             extracted[key] = value
+    # ChatUsage subclasses dict (DictMixin) yet still carries .metadata —
+    # attempt the reasoning extraction regardless of the source path.
+    reasoning = _reasoning_tokens(usage)
+    if reasoning is not None:
+        extracted["reasoning_tokens"] = reasoning
     return extracted or None
 
 

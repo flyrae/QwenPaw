@@ -481,6 +481,36 @@ class TestModelCall:
             {"name": "web_search", "id": "call-1"},
         ]
 
+    async def test_reasoning_tokens_extracted(self, service, hook_ctx):
+        from agentscope.model._model_usage import ChatUsage
+
+        await AgentTraceRunStartHook().run(hook_ctx)
+
+        async def next_handler(**kwargs):
+            return SimpleNamespace(
+                text="a",
+                usage=ChatUsage(
+                    input_tokens=10,
+                    output_tokens=7,
+                    time=0.1,
+                    metadata={
+                        "completion_tokens_details": {
+                            "reasoning_tokens": 5,
+                        },
+                    },
+                ),
+            )
+
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={"messages": []},
+            next_handler=next_handler,
+        )
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        result_ev = [e for e in events if e["type"] == "llm/result"][0]
+        assert result_ev["data"]["usage"]["reasoning_tokens"] == 5
+
     async def test_non_stream_has_no_timing(self, service, hook_ctx):
         await AgentTraceRunStartHook().run(hook_ctx)
 

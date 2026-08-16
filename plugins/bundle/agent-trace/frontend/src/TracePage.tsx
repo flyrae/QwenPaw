@@ -350,6 +350,7 @@ export function TracePage() {
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
+    reasoningTokens: number;
   } | null>(null);
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -460,6 +461,7 @@ export function TracePage() {
             inputTokens: stats.input_tokens,
             outputTokens: stats.output_tokens,
             totalTokens: stats.total_tokens,
+            reasoningTokens: Number(stats.reasoning_tokens ?? 0),
           });
         })
         .catch(() => {
@@ -564,6 +566,7 @@ export function TracePage() {
     let outputTokens = 0;
     let cacheReadTokens = 0;
     let cacheWriteTokens = 0;
+    let reasoningTokens = 0;
     let ttftMs: number | null = null;
     let decodeMs: number | null = 0;
     const errors: string[] = [];
@@ -573,6 +576,7 @@ export function TracePage() {
         outputTokens += cell.usage.output_tokens ?? 0;
         cacheReadTokens += cell.usage.cache_input_tokens ?? 0;
         cacheWriteTokens += cell.usage.cache_creation_input_tokens ?? 0;
+        reasoningTokens += cell.usage.reasoning_tokens ?? 0;
       }
       if (cell.timing) {
         ttftMs =
@@ -588,6 +592,7 @@ export function TracePage() {
     const userCell = cells.find((cell) => cell.kind === "user");
     const lastOptions = [...llmCells].reverse().find((cell) => cell.options)
       ?.options;
+    const lastMessage = [...llmCells].reverse().find((cell) => cell.outputText);
     return {
       turn: selectedTurn,
       status: turn.status,
@@ -601,6 +606,8 @@ export function TracePage() {
       outputTokens,
       cacheReadTokens,
       cacheWriteTokens,
+      reasoningTokens,
+      resultIndex: lastMessage?.index,
       ttftMs,
       decodeMs,
       errors,
@@ -611,6 +618,7 @@ export function TracePage() {
               inputTokens: sessionTotals.inputTokens,
               outputTokens: sessionTotals.outputTokens,
               totalTokens: sessionTotals.totalTokens,
+              reasoningTokens: sessionTotals.reasoningTokens,
             }
           : undefined,
     };
