@@ -63,6 +63,8 @@ const STRINGS = {
     exported: "已导出 JSONL",
     deleted: "已删除",
     sessionTotal: "会话累计",
+    collapseSidebar: "收起会话列表",
+    expandSidebar: "展开会话列表",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -127,6 +129,8 @@ const STRINGS = {
     exported: "JSONL exported",
     deleted: "Deleted",
     sessionTotal: "session total",
+    collapseSidebar: "Collapse session list",
+    expandSidebar: "Expand session list",
   },
 } as const;
 
