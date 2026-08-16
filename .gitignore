@@ -9,6 +9,9 @@
 # AI agent / copilot local config
 .aone_copilot/
 .agents/
+.zcode/
+dsh-trace-screenshots/
+kimi-review/
 
 # dependencies
 /.pnp
@@ -33,6 +36,9 @@ cookbook/_build
 /build
 dist/
 .wheelshim/
+# Plugin frontend build outputs ARE committed (e.g. computer-use, agent-trace)
+!plugins/*/dist/
+!plugins/*/*/dist/
 # Console frontend build (generated in Docker/CI, do not commit)
 console/.cursor/
 console/.wiki/
@@ -154,3 +160,4 @@ docs-site/
 # Local review notes
 docs/reviews/
 tmp/
+kimi-review/
