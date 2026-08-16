@@ -46,7 +46,7 @@ def build_router() -> APIRouter:
     ) -> Dict[str, Any]:
         service = _require_service()
         sessions = await asyncio.to_thread(
-            service.store.list_sessions,
+            service.list_sessions_with_titles,
         )
         window = sessions[offset : offset + limit]
         return {

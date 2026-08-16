@@ -150,6 +150,40 @@ class TestSessions:
         response = await client.get("/agent-trace/sessions/none/stats")
         assert response.status_code == 404
 
+    async def test_sessions_enriched_with_chat_titles(
+        self,
+        client,
+        service,
+        tmp_path,
+    ):
+        import json as jsonlib
+
+        # Simulate a workspace chats.json next to the traces root.
+        workspaces = tmp_path / "workspaces" / "default"
+        workspaces.mkdir(parents=True, exist_ok=True)
+        (workspaces / "chats.json").write_text(
+            jsonlib.dumps(
+                {
+                    "version": 1,
+                    "chats": [
+                        {
+                            "session_id": "sess-1",
+                            "name": "上海天气查询",
+                            "status": "idle",
+                        },
+                    ],
+                },
+            ),
+            encoding="utf-8",
+        )
+        await seed_session(service)
+        response = await client.get("/agent-trace/sessions")
+        body = response.json()
+        assert body["total"] == 1
+        summary = body["sessions"][0]
+        assert summary["title"] == "上海天气查询"
+        assert summary["chat_status"] == "idle"
+
     async def test_filter_by_type_and_query(self, client, service):
         await seed_session(service)
         response = await client.get(

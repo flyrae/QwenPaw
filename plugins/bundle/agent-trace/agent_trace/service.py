@@ -21,6 +21,13 @@ CLEANUP_INTERVAL_SECONDS = 24 * 3600
 _service: Optional["TraceService"] = None
 
 
+def _safe_mtime(path: Path) -> Optional[float]:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
 def get_service() -> Optional["TraceService"]:
     """Return the process-wide trace service, if the plugin is loaded."""
     return _service
@@ -43,6 +50,8 @@ class TraceService:
         self.store = TraceStore(self.root, self.config)
         self._patterns: Optional[List[Pattern[str]]] = None
         self._cleanup_task: Optional["asyncio.Task"] = None
+        self._titles_stamp: Optional[tuple] = None
+        self._titles_cache: Optional[dict] = None
         # Last recorded request-header sha per session, so unchanged
         # prompts are not re-recorded on every model call.
         self._header_sha_by_session: dict = {}
@@ -117,6 +126,78 @@ class TraceService:
                 len(removed),
                 self.root,
             )
+
+    # ------------------------------------------------------------------
+    # Chat metadata enrichment (Console chat list parity)
+    # ------------------------------------------------------------------
+
+    def list_sessions_with_titles(self) -> list:
+        """Session summaries enriched with Console chat names/status.
+
+        Reads each workspace's ``chats.json`` (the same source the
+        Console chat list uses) and attaches ``title``/``chat_status``
+        by session_id. Cached until any chats.json mtime changes.
+        """
+        sessions = self.store.list_sessions()
+        titles = self._chat_titles()
+        if not titles:
+            return sessions
+        for summary in sessions:
+            info = titles.get(summary.get("session_id", ""))
+            if info:
+                summary["title"] = info["title"]
+                summary["chat_status"] = info["chat_status"]
+                if not summary.get("agent_id") and info.get("agent"):
+                    summary["agent_id"] = info["agent"]
+        return sessions
+
+    def _chat_titles(self) -> dict:
+        import json
+
+        workspaces = self.root.parent / "workspaces"
+        try:
+            files = sorted(workspaces.glob("*/chats.json"))
+        except OSError:
+            return {}
+        stamp = tuple(
+            (str(path), path.stat().st_mtime)
+            for path in files
+            if _safe_mtime(path) is not None
+        )
+        if stamp == self._titles_stamp and self._titles_cache is not None:
+            return self._titles_cache
+        titles: dict = {}
+        for path in files:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict):
+                # Persisted shape: {"chats": [...], "version": 1}
+                data = data.get("chats")
+            if not isinstance(data, list):
+                continue
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                session_id = item.get("session_id")
+                if not isinstance(session_id, str) or not session_id:
+                    continue
+                # First workspace wins; traces are keyed by session_id
+                # and duplicates across agents are rare.
+                titles.setdefault(
+                    session_id,
+                    {
+                        "title": str(item.get("name") or ""),
+                        "chat_status": str(item.get("status") or ""),
+                        "agent": str(
+                            path.parent.name or "",
+                        ),
+                    },
+                )
+        self._titles_stamp = stamp
+        self._titles_cache = titles
+        return titles
 
     async def shutdown(self) -> None:
         """Stop the flush task after draining buffered events."""

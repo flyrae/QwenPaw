@@ -466,7 +466,7 @@ export function TracePage() {
     const needle = sessionSearch.trim().toLowerCase();
     if (!needle) return sessions;
     return sessions.filter((item) =>
-      [item.session_id, item.agent_id, item.channel]
+      [item.session_id, item.title ?? "", item.agent_id, item.channel]
         .join(" ")
         .toLowerCase()
         .includes(needle),
@@ -562,10 +562,22 @@ export function TracePage() {
                     <Text
                       strong
                       style={{ fontSize: 13, flex: 1, minWidth: 0 }}
-                      ellipsis={{ tooltip: item.session_id }}
+                      ellipsis={{
+                        tooltip: `${item.title ? `${item.title}\n` : ""}${
+                          item.session_id
+                        }`,
+                      }}
                     >
-                      {item.agent_id || shortId(item.session_id)}
+                      {item.title || item.agent_id || shortId(item.session_id)}
                     </Text>
+                    {item.agent_id ? (
+                      <Tag
+                        style={{ marginInlineEnd: 0, fontSize: 10 }}
+                        color="geekblue"
+                      >
+                        {item.agent_id}
+                      </Tag>
+                    ) : null}
                     <Tag
                       color={STATUS_COLORS[item.status] ?? "default"}
                       style={{ marginInlineEnd: 0 }}

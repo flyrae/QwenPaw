@@ -4,6 +4,8 @@ const host = window.QwenPaw.host;
 
 export interface SessionSummary {
   session_id: string;
+  title?: string;
+  chat_status?: string;
   agent_id: string;
   channel: string;
   created_at: string | null;
