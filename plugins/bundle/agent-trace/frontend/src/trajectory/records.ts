@@ -44,6 +44,7 @@ export interface TrajectoryRecord {
   messages?: MessageDigest[];
   /* assistant */
   model?: string;
+  provider?: string;
   outputText?: string;
   thinkingText?: string;
   usage?: UsageInfo;

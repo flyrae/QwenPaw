@@ -562,6 +562,13 @@ export function TracePage() {
           .filter((model): model is string => Boolean(model)),
       ),
     ];
+    const providers = [
+      ...new Set(
+        llmCells
+          .map((cell) => cell.provider)
+          .filter((provider): provider is string => Boolean(provider)),
+      ),
+    ];
     let inputTokens = 0;
     let outputTokens = 0;
     let cacheReadTokens = 0;
@@ -602,6 +609,7 @@ export function TracePage() {
       llmCalls: llmCells.length,
       toolCalls: toolCells.length,
       models,
+      providers,
       inputTokens,
       outputTokens,
       cacheReadTokens,

@@ -39,6 +39,7 @@ export interface RequestSummary {
   llmCalls: number;
   toolCalls: number;
   models: string[];
+  providers: string[];
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -769,6 +770,9 @@ export function Inspector({
           }
           danger={selected.isError}
         />
+        {selected.provider ? (
+          <KeyValue label="Provider" value={selected.provider} />
+        ) : null}
         {selected.model ? (
           <KeyValue label={t(locale, "model")} value={selected.model} />
         ) : null}
