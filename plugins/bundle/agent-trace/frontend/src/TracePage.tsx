@@ -889,6 +889,21 @@ export function TracePage() {
               {t(locale, "selectSession")}
             </Text>
           )}
+          {selected && (
+            <Text
+              code
+              copyable={{
+                text: selected,
+                tooltips: [
+                  t(locale, "copySessionId"),
+                  t(locale, "copiedSessionId"),
+                ],
+              }}
+              style={{ fontSize: 11 }}
+            >
+              {selected}
+            </Text>
+          )}
           <div style={{ marginLeft: "auto" }}>
             <Space>
               <SettingsPopover config={config} onChange={applyConfig}>

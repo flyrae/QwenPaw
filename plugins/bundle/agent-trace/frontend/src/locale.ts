@@ -79,6 +79,8 @@ const STRINGS = {
     video: "视频",
     inboundParts: "入站内容",
     deliveredText: "送达内容",
+    copySessionId: "复制会话 ID",
+    copiedSessionId: "已复制",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -159,6 +161,8 @@ const STRINGS = {
     video: "video",
     inboundParts: "Inbound parts",
     deliveredText: "Delivered text",
+    copySessionId: "Copy session ID",
+    copiedSessionId: "Copied",
   },
 } as const;
 
