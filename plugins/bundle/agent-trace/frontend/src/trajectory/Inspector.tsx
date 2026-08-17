@@ -779,6 +779,20 @@ export function Inspector({
         {selected.toolName ? (
           <KeyValue label="Tool" value={selected.toolName} />
         ) : null}
+        {selected.kind === "user" && (selected.channel || selected.userId) ? (
+          <KeyValue
+            label={t(locale, "source")}
+            value={[selected.channel, selected.userId]
+              .filter(Boolean)
+              .join(" · ")}
+          />
+        ) : null}
+        {selected.receipt ? (
+          <KeyValue
+            label={t(locale, "channel")}
+            value={selected.receipt.channel ?? "-"}
+          />
+        ) : null}
         <KeyValue
           label={t(locale, "duration")}
           value={formatSeconds(selected.timeSeconds)}
@@ -847,6 +861,34 @@ export function Inspector({
       label: t(locale, "output"),
       children: (
         <div style={{ display: "grid", gap: 8 }}>
+          {selected.inboundParts && selected.inboundParts.length > 0 ? (
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {`${t(locale, "inboundParts")} (${
+                  selected.inboundParts.length
+                })`}
+              </Text>
+              {selected.inboundParts.map((part, index) => (
+                <div
+                  key={index}
+                  style={{ display: "flex", gap: 8, alignItems: "baseline" }}
+                >
+                  <Text code style={{ fontSize: 11, flexShrink: 0 }}>
+                    {part.type.replace("Content", "")}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {part.text ?? "-"}
+                  </Text>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {selected.marker ? <Pre value={selected.marker} /> : null}
           {selected.toolCalls && selected.toolCalls.length > 0 ? (
             <div>

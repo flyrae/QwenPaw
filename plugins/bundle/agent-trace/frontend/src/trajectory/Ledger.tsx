@@ -13,6 +13,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type * as ReactNS from "react";
 
 import { storedLocale, t } from "../locale";
+import type { TraceLocale, TraceStringKey } from "../locale";
 import type { TrajectoryRecord, TrajectoryTurnModel } from "./records";
 import { formatSeconds, formatTokens } from "./records";
 
@@ -85,6 +86,38 @@ function statusLabel(status: string): string {
   const locale = storedLocale();
   const entry = STATUS_LABELS[status] ?? STATUS_LABELS.unknown;
   return locale === "zh-CN" ? entry.zh : entry.en;
+}
+
+const PART_TYPE_KEYS: Record<string, TraceStringKey> = {
+  ImageContent: "image",
+  FileContent: "file",
+  AudioContent: "audio",
+  VideoContent: "video",
+};
+
+/** Non-text media summary of a user message, e.g. "图片×1 文件×2". */
+function mediaPartsLabel(
+  record: TrajectoryRecord,
+  locale: TraceLocale,
+): string | null {
+  const counts = new Map<TraceStringKey, number>();
+  for (const part of record.inboundParts ?? []) {
+    const key = PART_TYPE_KEYS[part.type];
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  if (counts.size === 0) return null;
+  return [...counts.entries()]
+    .map(([key, count]) => `${t(locale, key)}×${count}`)
+    .join(" ");
+}
+
+/** One-line delivery receipt for an outbound message row. */
+function receiptLabel(record: TrajectoryRecord, locale: TraceLocale): string {
+  const receipt = record.receipt;
+  const channel = receipt?.channel ? ` · ${receipt.channel}` : "";
+  return `📤 ${t(locale, "replySent")}${channel} · ${(
+    receipt?.chars ?? 0
+  ).toLocaleString()} ${t(locale, "chars")}`;
 }
 
 interface LedgerRowModel {
@@ -190,7 +223,11 @@ function RecordRow({
           fontSize: 12,
         }}
       >
-        {record.kind === "tool" && record.toolName ? (
+        {record.receipt ? (
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {receiptLabel(record, storedLocale())}
+          </Text>
+        ) : record.kind === "tool" && record.toolName ? (
           <>
             <Text strong style={{ fontSize: 12 }}>
               {record.toolName}
@@ -206,12 +243,26 @@ function RecordRow({
             ) : null}
           </>
         ) : (
-          <Text
-            type={record.isError ? "danger" : undefined}
-            style={{ fontSize: 12 }}
-          >
-            {record.running ? `⏳ ${record.text || "…"}` : record.text || "—"}
-          </Text>
+          <>
+            <Text
+              type={record.isError ? "danger" : undefined}
+              style={{ fontSize: 12 }}
+            >
+              {record.running ? `⏳ ${record.text || "…"}` : record.text || "—"}
+            </Text>
+            {record.kind === "user" ? (
+              <>
+                <Text type="secondary" style={{ fontSize: 11 }}>{` ${
+                  mediaPartsLabel(record, storedLocale()) ?? ""
+                }`}</Text>
+                {record.channel && record.channel !== "console" ? (
+                  <Text code style={{ fontSize: 10 }}>
+                    {` @${record.channel}`}
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          </>
         )}
       </span>
       <span

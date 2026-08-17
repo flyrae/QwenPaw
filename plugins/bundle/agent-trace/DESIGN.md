@@ -46,7 +46,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | `approval/asked` | ApprovalService.create_pending **及 create_pending_summary** 补丁 | 工具名、severity、findings、摘要、`source_type`（tool_guard / driver_policy / harness / 插件）；**归属当前活跃 run** |
 | `approval/decided` | resolve_request / cancel_stale / cancel_all 补丁 | approved/denied/timed_out/cancelled/**superseded** + scope；asked 时记住 run 映射（上限 1024，FIFO 逐出），跨会话决策也落回原 run；批量取消**逐条落回各自会话文件** |
 | `agent/spawn` | 子代理 run 开启时写入**根会话**文件 | child_session_id / child_agent_id / child_trace_id |
-| `message/outbound` | POST_RESPONSE(95)，session_save 后 | 最终 assistant 回复全文（读 agent.state.context，与 runtime 同路径） |
+| `message/outbound` | POST_RESPONSE(95)，session_save 后 | 最终 assistant 回复全文（读 agent.state.context，与 runtime 同路径）；台账渲染为**一行回执**（`📤 已回复 · 渠道 · 字数`），不重复正文 |
 | `run/end` | POST_RESPONSE / ON_ERROR / FINALLY 兜底 | success / error / cancelled / interrupted（崩溃恢复合成） |
 
 采集全部 fail-open：任何异常只 debug 日志，绝不影响 agent 回复。
@@ -130,6 +130,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | `a31206c3` | 会话统计条 + 按需检查器（Kimi 协作） |
 | `53902f7b` | **宿主修复**：workspace 替换后补发 created 钩子——force 热更新不再断采集 |
 | （本次） | 审批补丁复核修复：包装 `create_pending_summary`（driver gate/harness/computer-use 路径）、`cancel_stale` superseded 事件、cancel_all 逐条落回子会话、身份校验式 restore 防 qwenpaw-pet 互踩、ask-run 映射容量上限；88 测试 |
+| （本次） | 台账可读性：入站报文**合并进 USER 行**（来源渠道/用户/多媒体部件，旧数据降级为可读独立行），出站报文改为一行**回执**（渠道 + 字数，不再重复回复正文） |
 
 ## 11. 后续路线（未做，按价值排序）
 

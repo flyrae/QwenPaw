@@ -29,6 +29,12 @@ export interface TimingInfo {
   decode_ms: number;
 }
 
+/** One content part of a channel inbound message. */
+export interface InboundPart {
+  type: string;
+  text?: string;
+}
+
 /** One ledger row: a user input, an LLM call, a tool call, or a marker. */
 export interface TrajectoryRecord {
   index: number;
@@ -42,6 +48,12 @@ export interface TrajectoryRecord {
   running: boolean;
   /* user */
   messages?: MessageDigest[];
+  /* user message source (merged from message/inbound) */
+  channel?: string;
+  userId?: string;
+  inboundParts?: InboundPart[];
+  /* channel delivery receipt (message/outbound) */
+  receipt?: { channel?: string; chars: number };
   /* assistant */
   model?: string;
   provider?: string;
