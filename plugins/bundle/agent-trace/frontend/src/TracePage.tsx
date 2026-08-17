@@ -986,9 +986,24 @@ export function TracePage() {
               </div>
             </>
           ) : (
-            <Text type="secondary" style={{ fontSize: 13 }}>
-              {t(locale, "selectSession")}
-            </Text>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                {t(locale, "selectSession")}
+              </Text>
+              {/* Capture settings are global — keep the entry visible
+                  even when no session is selected. */}
+              <div style={{ marginLeft: "auto", flexShrink: 0 }}>
+                <SettingsPopover config={config} onChange={applyConfig}>
+                  <Button size="small" icon={<SettingOutlined />} />
+                </SettingsPopover>
+              </div>
+            </div>
           )}
         </div>
         {error && (
