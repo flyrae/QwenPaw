@@ -14,8 +14,12 @@ import type * as ReactNS from "react";
 
 import { storedLocale, t } from "../locale";
 import type { TraceLocale, TraceStringKey } from "../locale";
-import type { TrajectoryRecord, TrajectoryTurnModel } from "./records";
-import { formatSeconds, formatTokens } from "./records";
+import type {
+  MarkerKind,
+  TrajectoryRecord,
+  TrajectoryTurnModel,
+} from "./records";
+import { formatSeconds, formatTokens, recordKindLabel } from "./records";
 
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
@@ -24,7 +28,12 @@ const { Tag } = host.antd;
 const { Text } = host.antd.Typography;
 const {
   CaretRightOutlined,
+  CloseCircleOutlined,
+  FileTextOutlined,
   RobotOutlined,
+  RocketOutlined,
+  SafetyOutlined,
+  SendOutlined,
   SettingOutlined,
   ToolOutlined,
   UserOutlined,
@@ -44,11 +53,16 @@ const KIND_ICONS: Record<string, ReactNS.ReactNode> = {
   system: <SettingOutlined />,
 };
 
-const KIND_LABELS: Record<string, { zh: string; en: string }> = {
-  user: { zh: "用户", en: "USER" },
-  message: { zh: "助手", en: "ASSISTANT" },
-  tool: { zh: "工具", en: "TOOL" },
-  system: { zh: "标记", en: "SYSTEM" },
+/** Distinct tag color/icon per marker sub-kind (label via records.ts). */
+const MARKER_META: Record<
+  MarkerKind,
+  { color: string; icon: ReactNS.ReactNode }
+> = {
+  approval: { color: "volcano", icon: <SafetyOutlined /> },
+  receipt: { color: "cyan", icon: <SendOutlined /> },
+  spawn: { color: "geekblue", icon: <RocketOutlined /> },
+  header: { color: "green", icon: <FileTextOutlined /> },
+  error: { color: "red", icon: <CloseCircleOutlined /> },
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -75,12 +89,6 @@ const ROW_HEIGHT = 26;
 const BOUNDARY_HEIGHT = 34;
 const DIVIDER_HEIGHT = 9;
 const LOAD_OLDER_HEIGHT = 30;
-
-function kindLabel(kind: string): string {
-  const locale = storedLocale();
-  const entry = KIND_LABELS[kind];
-  return entry ? (locale === "zh-CN" ? entry.zh : entry.en) : kind;
-}
 
 function statusLabel(status: string): string {
   const locale = storedLocale();
@@ -202,8 +210,15 @@ function RecordRow({
         #{record.index}
       </span>
       <Tag
-        color={KIND_COLORS[record.kind] ?? "default"}
-        icon={KIND_ICONS[record.kind]}
+        color={
+          (record.markerKind && MARKER_META[record.markerKind]?.color) ||
+          KIND_COLORS[record.kind] ||
+          "default"
+        }
+        icon={
+          (record.markerKind && MARKER_META[record.markerKind]?.icon) ||
+          KIND_ICONS[record.kind]
+        }
         style={{
           marginInlineEnd: 0,
           fontSize: 10,
@@ -211,7 +226,7 @@ function RecordRow({
           flexShrink: 0,
         }}
       >
-        {kindLabel(record.kind)}
+        {recordKindLabel(record, storedLocale())}
       </Tag>
       <span
         style={{

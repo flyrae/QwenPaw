@@ -17,6 +17,7 @@ import {
   formatSeconds,
   formatThroughput,
   formatTokens,
+  recordKindLabel,
 } from "./records";
 
 const host = window.QwenPaw.host;
@@ -748,7 +749,7 @@ export function Inspector({
     children: (
       <div>
         <KeyValue label="#" value={String(selected.index)} />
-        <KeyValue label="Kind" value={selected.kind} />
+        <KeyValue label="Kind" value={recordKindLabel(selected, locale)} />
         {selected.runIndex > 0 && onSelectTurn ? (
           <div style={{ padding: "3px 0", textAlign: "right" }}>
             <a

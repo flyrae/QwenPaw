@@ -131,6 +131,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | `53902f7b` | **宿主修复**：workspace 替换后补发 created 钩子——force 热更新不再断采集 |
 | （本次） | 审批补丁复核修复：包装 `create_pending_summary`（driver gate/harness/computer-use 路径）、`cancel_stale` superseded 事件、cancel_all 逐条落回子会话、身份校验式 restore 防 qwenpaw-pet 互踩、ask-run 映射容量上限；88 测试 |
 | （本次） | 台账可读性：入站报文**合并进 USER 行**（来源渠道/用户/多媒体部件，旧数据降级为可读独立行），出站报文改为一行**回执**（渠道 + 字数，不再重复回复正文） |
+| （本次） | 标记行细分：审批（🛡盾牌/volcano）、回执（📤发送/cyan）、子代理（🚀火箭/geekblue）、提示词（📄文档/green）、错误（⭕红）各有专属标签与图标，不再共用"标记"；Inspector Kind 字段同步 |
 
 ## 11. 后续路线（未做，按价值排序）
 

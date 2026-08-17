@@ -178,6 +178,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
             runIndex: runNumber,
             runId: event.run_id,
             kind: "system",
+            markerKind: "error",
             text: firstLine(String(data.error)) || "run failed",
             marker: String(data.error ?? "run failed"),
             timeSeconds:
@@ -204,7 +205,8 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           runIndex: 0,
           runId: event.run_id,
           kind: "system",
-          text: `🚀 ${childAgent} → ${childSession ?? "?"}`,
+          markerKind: "spawn",
+          text: `${childAgent} → ${childSession ?? "?"}`,
           timeSeconds: 0,
           startedAt: epochMs(event.t),
           isError: false,
@@ -281,6 +283,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           runIndex: 0,
           runId: event.run_id,
           kind: "system",
+          markerKind: "receipt",
           text: "📤",
           timeSeconds: 0,
           startedAt: epochMs(event.t),
@@ -301,7 +304,8 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           runIndex: 0,
           runId: event.run_id,
           kind: "system",
-          text: `🛡 approval asked: ${String(data.tool_name ?? "?")}`,
+          markerKind: "approval",
+          text: String(data.tool_name ?? "?"),
           timeSeconds: 0,
           startedAt: epochMs(event.t),
           isError: false,
@@ -312,14 +316,14 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
       }
       case "approval/decided": {
         const decision = String(data.decision ?? "?");
+        const tool = data.tool_name ? String(data.tool_name) : "";
         appendCell(event.run_id, {
           index: ++index,
           runIndex: 0,
           runId: event.run_id,
           kind: "system",
-          text: `🛡 approval ${decision}${
-            data.tool_name ? `: ${String(data.tool_name)}` : ""
-          }`,
+          markerKind: "approval",
+          text: tool ? `${tool} → ${decision}` : decision,
           timeSeconds: 0,
           startedAt: epochMs(event.t),
           isError: decision === "denied",
@@ -344,6 +348,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           runIndex: 0,
           runId: event.run_id,
           kind: "system",
+          markerKind: "header",
           text:
             reason === "initial"
               ? `⚙ ${
