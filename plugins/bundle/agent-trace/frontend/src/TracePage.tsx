@@ -242,6 +242,20 @@ export function TracePage() {
     }
   }, [loadSessions]);
 
+  // Keep the URL's ?session= in sync with the sidebar selection so the
+  // address stays shareable/refreshable. replaceState: no reload, no
+  // extra history entry.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      if (selected) url.searchParams.set("session", selected);
+      else url.searchParams.delete("session");
+      window.history.replaceState(window.history.state, "", url);
+    } catch {
+      /* ignore malformed URLs */
+    }
+  }, [selected]);
+
   // Keep the session list fresh so new conversations show up without
   // a manual refresh.
   useEffect(() => {
