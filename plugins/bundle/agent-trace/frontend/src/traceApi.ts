@@ -83,6 +83,19 @@ async function requestRaw(path: string, init?: RequestInit): Promise<Response> {
       });
 }
 
+/** HTTP error from the plugin API, carrying the status code so callers
+ * can branch on it (e.g. 404 = session without trace data) instead of
+ * matching on the human-readable detail string. */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function requestJson<T>(
   path: string,
   init?: RequestInit,
@@ -100,7 +113,8 @@ export async function requestJson<T>(
       payload && typeof payload === "object" && "detail" in payload
         ? (payload as { detail?: unknown }).detail
         : undefined;
-    throw new Error(
+    throw new ApiError(
+      response.status,
       typeof detail === "string" ? detail : `HTTP ${response.status}`,
     );
   }

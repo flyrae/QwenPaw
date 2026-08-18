@@ -8,6 +8,7 @@ import type * as ReactNS from "react";
 
 import { resolveLocale, storedLocale, t, type TraceLocale } from "./locale";
 import {
+  ApiError,
   deleteSessionRemote,
   exportSessionFile,
   fetchConfig,
@@ -173,7 +174,10 @@ export function SessionTraceView({
     reasoningTokens: number;
   } | null>(null);
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    message: string;
+    status: number | null;
+  } | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   sessionIdRef.current = sessionId;
 
@@ -201,7 +205,10 @@ export function SessionTraceView({
         return body;
       });
     } catch (exc) {
-      setError(String((exc as Error).message));
+      setError({
+        message: String((exc as Error).message),
+        status: exc instanceof ApiError ? exc.status : null,
+      });
     } finally {
       if (!beforeSeq) setDetailLoading(false);
     }
@@ -473,9 +480,9 @@ export function SessionTraceView({
   };
 
   // A deep link to a session without trace data yet (e.g. a brand-new
-  // chat) is not an error — render a friendly empty state instead.
-  const isNotFoundError =
-    error !== null && error.toLowerCase().includes("not found");
+  // chat) is not an error — the API answers 404; render a friendly
+  // empty state instead.
+  const isNotFoundError = error?.status === 404;
 
   const showInspector = selectedRecord !== null || requestSummary !== null;
 
@@ -637,7 +644,7 @@ export function SessionTraceView({
       {error && !isNotFoundError && (
         <div style={{ padding: "2px 12px" }}>
           <Text type="danger" style={{ fontSize: 12 }}>
-            {`${t(locale, "loadFailed")}: ${error}`}
+            {`${t(locale, "loadFailed")}: ${error.message}`}
           </Text>
         </div>
       )}
