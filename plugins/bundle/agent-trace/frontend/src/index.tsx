@@ -1,4 +1,4 @@
-import { TraceDockLauncher } from "./TraceDockPanel";
+import { TraceHeaderButton } from "./TraceHeaderButton";
 import { TracePage } from "./TracePage";
 import { storedLocale, t } from "./locale";
 
@@ -14,10 +14,10 @@ window.QwenPaw.registerRoutes?.("agent-trace", [
   },
 ]);
 
-// Dock the trace panel inside the chat page (header button, dsh-style).
+// Chat-header quick jump straight into the current session's trace.
 // Optional chaining: hosts without the chat SDK keep the standalone page.
 window.QwenPaw.chat?.rightHeader?.add?.(
   "agent-trace",
-  React.createElement(TraceDockLauncher),
-  { id: "agent-trace-dock" },
+  React.createElement(TraceHeaderButton),
+  { id: "agent-trace-jump" },
 );

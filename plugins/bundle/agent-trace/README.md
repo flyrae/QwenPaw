@@ -74,18 +74,13 @@ session on the left; the right side is the trajectory view:
 
 The recording switches live in the page's settings popover.
 
-### Docked chat panel
+### Chat-header quick jump
 
-The trace view is also embedded in the chat page (dsh-style): a 🧭 button
-in the chat header opens a docked right-side panel that **follows the
-current conversation** (it re-targets as you switch chats). The panel
-shares the full page's toolbar / timeline / ledger; record inspection
-opens as an overlay drawer, sub-agent lineage jumps retarget the panel
-until you switch chats, and the header link opens the selected session
-in the full trace page (`/plugin/agent-trace?session=…`). Width is
-drag-resizable and remembered per browser. On hosts without the chat
-extension API the button silently doesn't register — the standalone
-page keeps working.
+A 🧭 button in the chat header jumps straight to the trace page with
+the **current conversation preselected** (`/plugin/agent-trace?session=…`,
+deep link). The link keeps the `/console` router basename the host may
+serve under. On hosts without the chat extension API the button
+silently doesn't register — the standalone page keeps working.
 
 ## REST API
 

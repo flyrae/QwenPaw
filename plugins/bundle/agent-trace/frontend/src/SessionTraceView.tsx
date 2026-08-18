@@ -52,7 +52,6 @@ const React: typeof ReactNS = host.React;
 const { useCallback, useEffect, useMemo, useRef, useState } = React;
 const {
   Button,
-  Drawer,
   Empty,
   Popconfirm,
   Popover,
@@ -140,12 +139,6 @@ export interface SessionTraceViewProps {
   onJumpSession: (sessionId: string) => void;
   /** Called on toolbar refresh so the parent can reload its session list. */
   onRefreshSessions?: () => void;
-  /** Page mode renders the inspector as a side pane; panel mode as a drawer. */
-  variant?: "page" | "panel";
-  /** Empty-state description override (panel shows follow hints). */
-  emptyText?: string;
-  /** Ledger empty-text override when the session has no events yet. */
-  ledgerEmptyText?: string;
 }
 
 /**
@@ -158,9 +151,6 @@ export function SessionTraceView({
   locale,
   onJumpSession,
   onRefreshSessions,
-  variant = "page",
-  emptyText,
-  ledgerEmptyText,
 }: SessionTraceViewProps) {
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -482,20 +472,6 @@ export function SessionTraceView({
     setSelectedTurn(null);
   };
 
-  const inspectorNode = (
-    <Inspector
-      record={selectedRecord}
-      request={requestSummary}
-      onJumpSession={onJumpSession}
-      onSelectTurn={(turn: number) => {
-        setSelectedTurn(turn);
-        setSelectedIndex(null);
-      }}
-      onClose={closeInspector}
-      fillContainer={variant === "panel"}
-    />
-  );
-
   const showInspector = selectedRecord !== null || requestSummary !== null;
 
   return (
@@ -565,28 +541,26 @@ export function SessionTraceView({
                           );
                       }}
                     >
-                      {variant === "panel" ? null : t(locale, "export")}
+                      {t(locale, "export")}
                     </Button>
                   </Tooltip>
-                  {variant === "panel" ? null : (
-                    <Popconfirm
-                      title={t(locale, "deleteConfirm")}
-                      onConfirm={() => {
-                        void deleteSessionRemote(sessionId)
-                          .then(() => {
-                            message.success(t(locale, "deleted"));
-                            onRefreshSessions?.();
-                          })
-                          .catch((exc: Error) =>
-                            message.error(String(exc.message)),
-                          );
-                      }}
-                    >
-                      <Button size="small" danger icon={<DeleteOutlined />}>
-                        {t(locale, "delete")}
-                      </Button>
-                    </Popconfirm>
-                  )}
+                  <Popconfirm
+                    title={t(locale, "deleteConfirm")}
+                    onConfirm={() => {
+                      void deleteSessionRemote(sessionId)
+                        .then(() => {
+                          message.success(t(locale, "deleted"));
+                          onRefreshSessions?.();
+                        })
+                        .catch((exc: Error) =>
+                          message.error(String(exc.message)),
+                        );
+                    }}
+                  >
+                    <Button size="small" danger icon={<DeleteOutlined />}>
+                      {t(locale, "delete")}
+                    </Button>
+                  </Popconfirm>
                 </Space>
               </div>
             </div>
@@ -615,25 +589,23 @@ export function SessionTraceView({
                       )}`
                     : "")}
               </Text>
-              {variant === "panel" ? null : (
-                <Text
-                  type="secondary"
-                  copyable={{
-                    text: sessionId,
-                    tooltips: [
-                      t(locale, "copySessionId"),
-                      t(locale, "copiedSessionId"),
-                    ],
-                  }}
-                  style={{
-                    fontSize: 11,
-                    marginLeft: "auto",
-                    flexShrink: 0,
-                  }}
-                >
-                  {sessionId}
-                </Text>
-              )}
+              <Text
+                type="secondary"
+                copyable={{
+                  text: sessionId,
+                  tooltips: [
+                    t(locale, "copySessionId"),
+                    t(locale, "copiedSessionId"),
+                  ],
+                }}
+                style={{
+                  fontSize: 11,
+                  marginLeft: "auto",
+                  flexShrink: 0,
+                }}
+              >
+                {sessionId}
+              </Text>
             </div>
           </>
         ) : (
@@ -645,7 +617,7 @@ export function SessionTraceView({
             }}
           >
             <Text type="secondary" style={{ fontSize: 13 }}>
-              {emptyText ?? t(locale, "selectSession")}
+              {t(locale, "selectSession")}
             </Text>
             {/* Capture settings are global — keep the entry visible
                 even when no session is selected. */}
@@ -722,7 +694,7 @@ export function SessionTraceView({
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           style={{ paddingTop: 64 }}
-          description={emptyText ?? t(locale, "selectSession")}
+          description={t(locale, "selectSession")}
         />
       ) : (
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
@@ -773,32 +745,21 @@ export function SessionTraceView({
                   detail.events[0]?.seq,
                 ).finally(() => setLoadingOlder(false));
               }}
-              emptyText={ledgerEmptyText ?? t(locale, "noSessions")}
+              emptyText={t(locale, "noSessions")}
               initialRecord={initialHeader}
             />
           </div>
-          {variant === "panel" ? (
-            <Drawer
-              open={showInspector}
-              placement="right"
-              width="92%"
-              getContainer={false}
-              closable={false}
-              mask={false}
-              onClose={closeInspector}
-              styles={{
-                body: {
-                  display: "flex",
-                  flexDirection: "column",
-                  minHeight: 0,
-                  padding: 0,
-                },
+          {showInspector ? (
+            <Inspector
+              record={selectedRecord}
+              request={requestSummary}
+              onJumpSession={onJumpSession}
+              onSelectTurn={(turn: number) => {
+                setSelectedTurn(turn);
+                setSelectedIndex(null);
               }}
-            >
-              {showInspector ? inspectorNode : null}
-            </Drawer>
-          ) : showInspector ? (
-            inspectorNode
+              onClose={closeInspector}
+            />
           ) : null}
         </div>
       )}

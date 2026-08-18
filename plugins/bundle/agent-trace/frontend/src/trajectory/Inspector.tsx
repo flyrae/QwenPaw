@@ -192,12 +192,6 @@ export interface InspectorProps {
   onJumpRecord?: (index: number) => void;
   onSelectTurn?: (turn: number) => void;
   onClose?: () => void;
-  /**
-   * Stretch to the parent container instead of using the built-in
-   * resizable width (used when the inspector is embedded in a drawer
-   * inside the docked chat panel).
-   */
-  fillContainer?: boolean;
 }
 
 /** dsh-style token breakdown rows (UsageRows parity). */
@@ -656,11 +650,9 @@ export function Inspector({
   onJumpRecord,
   onSelectTurn,
   onClose,
-  fillContainer = false,
 }: InspectorProps) {
   const locale = storedLocale();
   const [width, setWidth] = useState(400);
-  const asideWidth: number | string = fillContainer ? "100%" : width;
   const dragRef = useRef<{ anchorX: number; anchorWidth: number } | null>(null);
   useEffect(() => {
     const onMove = (event: globalThis.PointerEvent) => {
@@ -687,7 +679,7 @@ export function Inspector({
       <aside
         style={{
           flexShrink: 0,
-          width: asideWidth,
+          width,
           borderLeft: "1px solid rgba(128,128,128,0.18)",
           display: "flex",
           alignItems: "center",
@@ -707,7 +699,7 @@ export function Inspector({
       <aside
         style={{
           flexShrink: 0,
-          width: asideWidth,
+          width,
           borderLeft: "1px solid rgba(128,128,128,0.18)",
           display: "flex",
           flexDirection: "column",
@@ -715,9 +707,7 @@ export function Inspector({
           position: "relative",
         }}
       >
-        {fillContainer ? null : (
-          <ResizeHandle dragRef={dragRef} width={width} />
-        )}
+        <ResizeHandle dragRef={dragRef} width={width} />
         <div style={{ padding: "8px 12px 0", overflow: "auto" }}>
           <CloseButton onClose={onClose} />
           <RequestInspector request={request} onJumpRecord={onJumpRecord} />
@@ -732,7 +722,7 @@ export function Inspector({
       <aside
         style={{
           flexShrink: 0,
-          width: asideWidth,
+          width,
           borderLeft: "1px solid rgba(128,128,128,0.18)",
           display: "flex",
           flexDirection: "column",
@@ -740,9 +730,7 @@ export function Inspector({
           position: "relative",
         }}
       >
-        {fillContainer ? null : (
-          <ResizeHandle dragRef={dragRef} width={width} />
-        )}
+        <ResizeHandle dragRef={dragRef} width={width} />
         <div style={{ padding: "8px 12px 0", overflow: "auto" }}>
           <CloseButton onClose={onClose} />
           <HeaderInspector record={selected} />
@@ -1046,7 +1034,7 @@ export function Inspector({
     <aside
       style={{
         flexShrink: 0,
-        width: asideWidth,
+        width,
         borderLeft: "1px solid rgba(128,128,128,0.18)",
         display: "flex",
         flexDirection: "column",
@@ -1054,7 +1042,7 @@ export function Inspector({
         position: "relative",
       }}
     >
-      {fillContainer ? null : <ResizeHandle dragRef={dragRef} width={width} />}
+      <ResizeHandle dragRef={dragRef} width={width} />
       <div style={{ padding: "8px 12px 0", overflow: "auto" }}>
         <CloseButton onClose={onClose} />
         <Tabs size="small" items={items} tabBarStyle={{ marginBottom: 8 }} />

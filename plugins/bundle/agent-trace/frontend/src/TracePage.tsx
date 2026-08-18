@@ -405,7 +405,6 @@ export function TracePage() {
         locale={locale}
         onJumpSession={setSelected}
         onRefreshSessions={() => void loadSessions()}
-        variant="page"
       />
     </div>
   );
