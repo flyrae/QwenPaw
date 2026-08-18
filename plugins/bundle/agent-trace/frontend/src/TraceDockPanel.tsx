@@ -48,11 +48,14 @@ function readStoredWidth(): number {
  */
 export function TraceDockLauncher() {
   const [open, setOpen] = useState(false);
-  const locale = useMemo(() => {
-    const raw =
-      typeof host.useLocale === "function" ? host.useLocale() : storedLocale();
-    return resolveLocale(raw);
-  }, []);
+  // Host hooks must be called at the top level on every render (never
+  // inside a memo callback) — the hook count has to stay stable.
+  const hostLocale =
+    typeof host.useLocale === "function" ? host.useLocale() : undefined;
+  const locale = useMemo(
+    () => resolveLocale(hostLocale ?? storedLocale()),
+    [hostLocale],
+  );
   return (
     <>
       <Tooltip title={t(locale, "dockTitle")}>
