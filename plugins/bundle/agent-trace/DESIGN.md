@@ -66,6 +66,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 |---|---|
 | `GET /sessions?limit=&offset=` | 分页会话列表（runs/llm/tools/token/状态摘要） |
 | `GET /sessions/{id}?before_seq=&limit=&type=&q=` | 事件窗口分页 + 类型/关键词服务端过滤 |
+| `GET /resolve?chat_id=` | Console 本地聊天 id → 后端轨迹会话 id（chats.json id 索引；后端 id 原样返回） |
 | `GET /sessions/{id}/stats` | 全量统计：时长、首/均 TTFT、解码总时长、token 四桶、按模型分解 |
 | `GET /sessions/{id}/lineage` | root 链接 + spawn 子会话列表 |
 | `GET /sessions/{id}/export` | 原始 JSONL 下载 |

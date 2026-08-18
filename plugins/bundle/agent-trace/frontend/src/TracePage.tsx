@@ -7,7 +7,11 @@
 import type * as ReactNS from "react";
 
 import { resolveLocale, storedLocale, t } from "./locale";
-import { fetchSessionsPage, type SessionSummary } from "./traceApi";
+import {
+  fetchSessionsPage,
+  resolveTraceSessionId,
+  type SessionSummary,
+} from "./traceApi";
 import { SessionTraceView } from "./SessionTraceView";
 import {
   formatCount,
@@ -224,10 +228,15 @@ export function TracePage() {
 
   useEffect(() => {
     void loadSessions();
-    // Deep link: /plugin/agent-trace?session=<id> preselects it.
+    // Deep link: /plugin/agent-trace?session=<id> preselects it. Console
+    // local chat ids (timestamp format) resolve to the backend id first.
     try {
       const param = new URLSearchParams(window.location.search).get("session");
-      if (param) setSelected(param);
+      if (param) {
+        void resolveTraceSessionId(param).then((resolved) => {
+          setSelected(resolved ?? param);
+        });
+      }
     } catch {
       /* ignore malformed URLs */
     }

@@ -82,6 +82,7 @@ const STRINGS = {
     copySessionId: "复制会话 ID",
     copiedSessionId: "已复制",
     viewCurrentTrace: "查看当前会话轨迹",
+    noTraceForSession: "该会话暂无轨迹记录，发送消息后自动生成",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -165,6 +166,8 @@ const STRINGS = {
     copySessionId: "Copy session ID",
     copiedSessionId: "Copied",
     viewCurrentTrace: "View this chat's trace",
+    noTraceForSession:
+      "No trace for this session yet — it is created after the first message",
   },
 } as const;
 

@@ -7,6 +7,7 @@
 import type * as ReactNS from "react";
 
 import { resolveLocale, storedLocale, t } from "./locale";
+import { resolveTraceSessionId } from "./traceApi";
 
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
@@ -45,11 +46,16 @@ export function TraceHeaderButton() {
         icon={<CompassOutlined />}
         aria-label={t(locale, "viewCurrentTrace")}
         onClick={() => {
-          const sessionId =
+          const raw =
             typeof host.getCurrentSessionId === "function"
               ? host.getCurrentSessionId()
               : null;
-          window.location.href = tracePagePath(sessionId);
+          // When nothing resolves yet (e.g. a brand-new chat with no
+          // trace), keep the raw id so the page shows its friendly
+          // "no trace yet" state instead of the bare session list.
+          void resolveTraceSessionId(raw).then((sessionId) => {
+            window.location.href = tracePagePath(sessionId ?? raw);
+          });
         }}
       />
     </Tooltip>

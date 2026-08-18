@@ -472,6 +472,11 @@ export function SessionTraceView({
     setSelectedTurn(null);
   };
 
+  // A deep link to a session without trace data yet (e.g. a brand-new
+  // chat) is not an error — render a friendly empty state instead.
+  const isNotFoundError =
+    error !== null && error.toLowerCase().includes("not found");
+
   const showInspector = selectedRecord !== null || requestSummary !== null;
 
   return (
@@ -629,7 +634,7 @@ export function SessionTraceView({
           </div>
         )}
       </div>
-      {error && (
+      {error && !isNotFoundError && (
         <div style={{ padding: "2px 12px" }}>
           <Text type="danger" style={{ fontSize: 12 }}>
             {`${t(locale, "loadFailed")}: ${error}`}
@@ -694,7 +699,11 @@ export function SessionTraceView({
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           style={{ paddingTop: 64 }}
-          description={t(locale, "selectSession")}
+          description={
+            isNotFoundError && sessionId
+              ? t(locale, "noTraceForSession")
+              : t(locale, "selectSession")
+          }
         />
       ) : (
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
