@@ -89,6 +89,7 @@ const STRINGS = {
     waitingSessionHint: "在对话页发送消息后，此处会实时展示当前会话的轨迹",
     noTraceYet: "当前对话还没有轨迹数据",
     closePanel: "关闭面板",
+    dragToResize: "拖动调整宽度",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -180,6 +181,7 @@ const STRINGS = {
       "Send a message in the chat and the current session's trace will appear here live",
     noTraceYet: "No trace data for this chat yet",
     closePanel: "Close panel",
+    dragToResize: "Drag to resize",
   },
 } as const;
 

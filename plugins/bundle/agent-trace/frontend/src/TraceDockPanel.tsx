@@ -18,17 +18,23 @@ const { CloseOutlined, CompassOutlined, ExportOutlined } = host.antdIcons;
 const { Text } = host.antd.Typography;
 
 const WIDTH_STORAGE_KEY = "agent-trace-dock-width";
-const DEFAULT_WIDTH = 420;
-const MIN_WIDTH = 320;
+const MIN_WIDTH = 340;
+const MAX_WIDTH = 1200;
 /** Never cover the whole window — keep the chat usable. */
-const CHAT_RESERVE_PX = 480;
+const CHAT_RESERVE_PX = 360;
+/** dsh-style default: ~30% of the viewport. */
+const DEFAULT_WIDTH_FRAC = 0.3;
+
+function defaultWidth(): number {
+  return clampWidth(Math.round(window.innerWidth * DEFAULT_WIDTH_FRAC));
+}
 
 function maxWidth(): number {
   return Math.max(MIN_WIDTH, window.innerWidth - CHAT_RESERVE_PX);
 }
 
 function clampWidth(raw: number): number {
-  const limit = Math.min(maxWidth(), 900);
+  const limit = Math.min(maxWidth(), MAX_WIDTH);
   return Math.min(limit, Math.max(MIN_WIDTH, Math.round(raw)));
 }
 
@@ -39,7 +45,21 @@ function readStoredWidth(): number {
   } catch {
     /* storage unavailable — fall through to default */
   }
-  return clampWidth(DEFAULT_WIDTH);
+  return defaultWidth();
+}
+
+/**
+ * Absolute URL path for the standalone trace page, keeping the `/console`
+ * router basename the host may be serving under (App.tsx getRouterBasename)
+ * so the link survives both layouts.
+ */
+function tracePagePath(sessionId: string | null): string {
+  const base = window.location.pathname.startsWith("/console")
+    ? "/console"
+    : "";
+  return `${base}/plugin/agent-trace${
+    sessionId ? `?session=${encodeURIComponent(sessionId)}` : ""
+  }`;
 }
 
 /**
@@ -173,9 +193,7 @@ function TraceDockPanel({ onClose }: { onClose: () => void }) {
   );
 
   const isDark = theme === "dark";
-  const fullPageUrl = `/plugin/agent-trace${
-    effectiveId ? `?session=${encodeURIComponent(effectiveId)}` : ""
-  }`;
+  const fullPageUrl = tracePagePath(effectiveId);
 
   return (
     <aside
@@ -207,6 +225,7 @@ function TraceDockPanel({ onClose }: { onClose: () => void }) {
             anchorWidth: width,
           };
         }}
+        title={t(locale, "dragToResize")}
         style={{
           position: "absolute",
           left: 0,
@@ -247,7 +266,6 @@ function TraceDockPanel({ onClose }: { onClose: () => void }) {
             type="text"
             icon={<ExportOutlined />}
             href={fullPageUrl}
-            target="_blank"
           />
         </Tooltip>
         <Tooltip title={t(locale, "closePanel")}>

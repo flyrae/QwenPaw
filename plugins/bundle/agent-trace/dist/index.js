@@ -85,7 +85,8 @@ const jn = {
     waitingSession: "等待会话…",
     waitingSessionHint: "在对话页发送消息后，此处会实时展示当前会话的轨迹",
     noTraceYet: "当前对话还没有轨迹数据",
-    closePanel: "关闭面板"
+    closePanel: "关闭面板",
+    dragToResize: "拖动调整宽度"
   },
   "en-US": {
     routeLabel: "Trace",
@@ -173,7 +174,8 @@ const jn = {
     waitingSession: "Waiting for a session…",
     waitingSessionHint: "Send a message in the chat and the current session's trace will appear here live",
     noTraceYet: "No trace data for this chat yet",
-    closePanel: "Close panel"
+    closePanel: "Close panel",
+    dragToResize: "Drag to resize"
   }
 };
 function nt(e) {
@@ -333,7 +335,7 @@ function re(e) {
 function te(e) {
   return e == null || !Number.isFinite(e) ? "-" : e >= 1e6 ? `${(e / 1e6).toFixed(1)}M` : e >= 1e3 ? `${(e / 1e3).toFixed(1)}k` : String(Math.round(e));
 }
-function Ct(e, l) {
+function Mt(e, l) {
   return e === void 0 || !Number.isFinite(e) || l === null || l === void 0 || l <= 0 ? "-" : `${(e / l).toFixed(1)} tok/s`;
 }
 function Pe(e) {
@@ -349,7 +351,7 @@ function ce(e) {
   const l = Date.parse(e);
   return Number.isFinite(l) ? l : null;
 }
-const st = window.QwenPaw.host, c = st.React, { useEffect: Qn, useRef: qn, useState: xn } = c, { Button: bn, Collapse: Zn, Empty: Pt, Tabs: zt } = st.antd, { Text: V } = st.antd.Typography, { CopyOutlined: es, CloseOutlined: ts } = st.antdIcons, ns = 320, ss = 720, Xe = {
+const st = window.QwenPaw.host, c = st.React, { useEffect: Qn, useRef: qn, useState: xn } = c, { Button: bn, Collapse: Zn, Empty: Pt, Tabs: Ct } = st.antd, { Text: V } = st.antd.Typography, { CopyOutlined: es, CloseOutlined: ts } = st.antdIcons, ns = 320, ss = 720, Xe = {
   key: "#8250df",
   string: "#0a6e3d",
   number: "#0550ae",
@@ -500,7 +502,7 @@ function rs({
     $,
     {
       label: v(t, "throughput"),
-      value: Ct(
+      value: Mt(
         e.outputTokens,
         e.decodeMs === null ? null : e.decodeMs / 1e3
       )
@@ -582,7 +584,7 @@ function rs({
     ] : []
   ];
   return /* @__PURE__ */ c.createElement("div", { style: { padding: "8px 4px" } }, /* @__PURE__ */ c.createElement(
-    zt,
+    Ct,
     {
       size: "small",
       activeKey: n,
@@ -714,7 +716,7 @@ function cs({ record: e }) {
       children: /* @__PURE__ */ c.createElement(de, { value: e.raw })
     }
   ];
-  return /* @__PURE__ */ c.createElement(zt, { size: "small", items: s, tabBarStyle: { marginBottom: 8 } });
+  return /* @__PURE__ */ c.createElement(Ct, { size: "small", items: s, tabBarStyle: { marginBottom: 8 } });
 }
 function ht({ dragRef: e, width: l }) {
   return /* @__PURE__ */ c.createElement(
@@ -950,7 +952,7 @@ function us({
       $,
       {
         label: v(i, "throughput"),
-        value: Ct(
+        value: Mt(
           x == null ? void 0 : x.output_tokens,
           k.decode_ms / 1e3
         )
@@ -990,7 +992,7 @@ function us({
       }
     },
     a ? null : /* @__PURE__ */ c.createElement(ht, { dragRef: m, width: d }),
-    /* @__PURE__ */ c.createElement("div", { style: { padding: "8px 12px 0", overflow: "auto" } }, /* @__PURE__ */ c.createElement(mt, { onClose: r }), /* @__PURE__ */ c.createElement(zt, { size: "small", items: T, tabBarStyle: { marginBottom: 8 } }))
+    /* @__PURE__ */ c.createElement("div", { style: { padding: "8px 12px 0", overflow: "auto" } }, /* @__PURE__ */ c.createElement(mt, { onClose: r }), /* @__PURE__ */ c.createElement(Ct, { size: "small", items: T, tabBarStyle: { marginBottom: 8 } }))
   );
 }
 const Z = window.QwenPaw.host.React, ds = Z.useRef, hs = Z.useState;
@@ -3695,7 +3697,7 @@ const vl = B.memo(function({
       )
     ))
   );
-}), Ot = window.QwenPaw.host, ue = Ot.React, { Button: Sl, Input: xl, Segmented: bl, Tooltip: Zt } = Ot.antd, { MenuFoldOutlined: wl, MenuUnfoldOutlined: kl, ReloadOutlined: Tl, SearchOutlined: _l } = Ot.antdIcons;
+}), zt = window.QwenPaw.host, ue = zt.React, { Button: Sl, Input: xl, Segmented: bl, Tooltip: Zt } = zt.antd, { MenuFoldOutlined: wl, MenuUnfoldOutlined: kl, ReloadOutlined: Tl, SearchOutlined: _l } = zt.antdIcons;
 function Il({
   mode: e,
   onModeChange: l,
@@ -4014,7 +4016,7 @@ function Rn({
         t,
         "toolCalls"
       )} ${re(Y.tool_ms_total / 1e3)}`,
-      `${v(t, "statTtftAvg")} ${Y.ttft_ms_avg === null ? "-" : re(Y.ttft_ms_avg / 1e3)} · ${Ct(
+      `${v(t, "statTtftAvg")} ${Y.ttft_ms_avg === null ? "-" : re(Y.ttft_ms_avg / 1e3)} · ${Mt(
         Y.output_tokens,
         Y.decode_ms_total / 1e3
       )}`
@@ -4301,23 +4303,29 @@ function Rn({
     )
   );
 }
-const oe = window.QwenPaw.host, U = oe.React, { useCallback: Fl, useEffect: Le, useMemo: _t, useRef: bt, useState: De } = U, { Button: It, Empty: on, Tag: rn, Tooltip: Ze } = oe.antd, { CloseOutlined: Bl, CompassOutlined: Hl, ExportOutlined: Wl } = oe.antdIcons, { Text: an } = oe.antd.Typography, Ln = "agent-trace-dock-width", Ul = 420, Dn = 320, Kl = 480;
-function Vl() {
-  return Math.max(Dn, window.innerWidth - Kl);
-}
-function Mt(e) {
-  const l = Math.min(Vl(), 900);
-  return Math.min(l, Math.max(Dn, Math.round(e)));
-}
+const oe = window.QwenPaw.host, U = oe.React, { useCallback: Fl, useEffect: Le, useMemo: _t, useRef: bt, useState: De } = U, { Button: It, Empty: on, Tag: rn, Tooltip: Ze } = oe.antd, { CloseOutlined: Bl, CompassOutlined: Hl, ExportOutlined: Wl } = oe.antdIcons, { Text: an } = oe.antd.Typography, Ln = "agent-trace-dock-width", Dn = 340, Ul = 1200, Kl = 360, Vl = 0.3;
 function Xl() {
-  try {
-    const e = Number(localStorage.getItem(Ln));
-    if (Number.isFinite(e) && e > 0) return Mt(e);
-  } catch {
-  }
-  return Mt(Ul);
+  return Ot(Math.round(window.innerWidth * Vl));
 }
 function Gl() {
+  return Math.max(Dn, window.innerWidth - Kl);
+}
+function Ot(e) {
+  const l = Math.min(Gl(), Ul);
+  return Math.min(l, Math.max(Dn, Math.round(e)));
+}
+function Jl() {
+  try {
+    const e = Number(localStorage.getItem(Ln));
+    if (Number.isFinite(e) && e > 0) return Ot(e);
+  } catch {
+  }
+  return Xl();
+}
+function Yl(e) {
+  return `${window.location.pathname.startsWith("/console") ? "/console" : ""}/plugin/agent-trace${e ? `?session=${encodeURIComponent(e)}` : ""}`;
+}
+function Ql() {
   const [e, l] = De(!1), t = typeof oe.useLocale == "function" ? oe.useLocale() : void 0, n = _t(
     () => nt(t ?? ne()),
     [t]
@@ -4331,13 +4339,13 @@ function Gl() {
       "aria-label": v(n, "dockTitle"),
       onClick: () => l((s) => !s)
     }
-  )), e ? /* @__PURE__ */ U.createElement(Jl, { onClose: () => l(!1) }) : null);
+  )), e ? /* @__PURE__ */ U.createElement(ql, { onClose: () => l(!1) }) : null);
 }
-function Jl({ onClose: e }) {
+function ql({ onClose: e }) {
   const l = typeof oe.useTheme == "function" ? oe.useTheme() : "light", t = typeof oe.useLocale == "function" ? oe.useLocale() : void 0, n = _t(
     () => nt(t ?? ne()),
     [t]
-  ), [s, r] = De(Xl), [a, i] = De(
+  ), [s, r] = De(Jl), [a, i] = De(
     () => typeof oe.getCurrentSessionId == "function" ? oe.getCurrentSessionId() : null
   ), [d, y] = De(null), [p, m] = De(null), o = bt(null), x = bt(a), k = bt(s);
   k.current = s;
@@ -4371,7 +4379,7 @@ function Jl({ onClose: e }) {
   }, [e]), Le(() => {
     const f = (z) => {
       const S = o.current;
-      S !== null && r(Mt(S.anchorWidth + (S.anchorX - z.clientX)));
+      S !== null && r(Ot(S.anchorWidth + (S.anchorX - z.clientX)));
     }, g = () => {
       if (o.current !== null)
         try {
@@ -4390,7 +4398,7 @@ function Jl({ onClose: e }) {
   const w = _t(
     () => (p == null ? void 0 : p.find((f) => f.session_id === T)) ?? null,
     [p, T]
-  ), u = l === "dark", h = `/plugin/agent-trace${T ? `?session=${encodeURIComponent(T)}` : ""}`;
+  ), u = l === "dark", h = Yl(T);
   return /* @__PURE__ */ U.createElement(
     "aside",
     {
@@ -4421,6 +4429,7 @@ function Jl({ onClose: e }) {
             anchorWidth: s
           };
         },
+        title: v(n, "dragToResize"),
         style: {
           position: "absolute",
           left: 0,
@@ -4453,8 +4462,7 @@ function Jl({ onClose: e }) {
           size: "small",
           type: "text",
           icon: /* @__PURE__ */ U.createElement(Wl, null),
-          href: h,
-          target: "_blank"
+          href: h
         }
       )),
       /* @__PURE__ */ U.createElement(Ze, { title: v(n, "closePanel") }, /* @__PURE__ */ U.createElement(
@@ -4496,13 +4504,13 @@ function Jl({ onClose: e }) {
     )
   );
 }
-const Me = window.QwenPaw.host, L = Me.React, { useCallback: cn, useEffect: un, useMemo: Qe, useState: Ee } = L, { Button: dn, Empty: hn, Input: Yl, Spin: Ql, Tag: mn, Tooltip: fn } = Me.antd, {
-  CaretRightOutlined: ql,
-  MenuFoldOutlined: Zl,
-  MenuUnfoldOutlined: eo,
-  SearchOutlined: to
+const Me = window.QwenPaw.host, L = Me.React, { useCallback: cn, useEffect: un, useMemo: Qe, useState: Ee } = L, { Button: dn, Empty: hn, Input: Zl, Spin: eo, Tag: mn, Tooltip: fn } = Me.antd, {
+  CaretRightOutlined: to,
+  MenuFoldOutlined: no,
+  MenuUnfoldOutlined: so,
+  SearchOutlined: lo
 } = Me.antdIcons, { Text: je } = Me.antd.Typography;
-function no({
+function oo({
   groups: e,
   collapsedAgents: l,
   onToggleAgent: t,
@@ -4530,7 +4538,7 @@ function no({
         }
       },
       /* @__PURE__ */ L.createElement(
-        ql,
+        to,
         {
           style: {
             fontSize: 10,
@@ -4618,7 +4626,7 @@ function no({
     }));
   }));
 }
-function so() {
+function ro() {
   const e = typeof Me.useLocale == "function" ? Me.useLocale() : void 0, l = Qe(
     () => nt(e ?? ne()),
     [e]
@@ -4701,7 +4709,7 @@ function so() {
       {
         size: "small",
         type: "text",
-        icon: /* @__PURE__ */ L.createElement(eo, null),
+        icon: /* @__PURE__ */ L.createElement(so, null),
         onClick: () => y(!1)
       }
     ))
@@ -4728,11 +4736,11 @@ function so() {
         }
       },
       /* @__PURE__ */ L.createElement(
-        Yl,
+        Zl,
         {
           allowClear: !0,
           size: "small",
-          prefix: /* @__PURE__ */ L.createElement(to, null),
+          prefix: /* @__PURE__ */ L.createElement(lo, null),
           placeholder: v(l, "searchPlaceholder"),
           value: k,
           style: { flex: 1, minWidth: 0 },
@@ -4744,13 +4752,13 @@ function so() {
         {
           size: "small",
           type: "text",
-          icon: /* @__PURE__ */ L.createElement(Zl, null),
+          icon: /* @__PURE__ */ L.createElement(no, null),
           onClick: () => y(!0)
         }
       ))
     ),
     I ? /* @__PURE__ */ L.createElement("div", { style: { padding: "0 12px 4px" } }, /* @__PURE__ */ L.createElement(je, { type: "danger", style: { fontSize: 12 } }, `${v(l, "loadFailed")}: ${I}`)) : null,
-    /* @__PURE__ */ L.createElement("div", { style: { flex: 1, overflow: "auto", padding: "0 8px 12px" } }, t === null ? /* @__PURE__ */ L.createElement("div", { style: { textAlign: "center", paddingTop: 48 } }, /* @__PURE__ */ L.createElement(Ql, null)) : g.length === 0 ? /* @__PURE__ */ L.createElement(
+    /* @__PURE__ */ L.createElement("div", { style: { flex: 1, overflow: "auto", padding: "0 8px 12px" } }, t === null ? /* @__PURE__ */ L.createElement("div", { style: { textAlign: "center", paddingTop: 48 } }, /* @__PURE__ */ L.createElement(eo, null)) : g.length === 0 ? /* @__PURE__ */ L.createElement(
       hn,
       {
         image: hn.PRESENTED_IMAGE_SIMPLE,
@@ -4766,7 +4774,7 @@ function so() {
         v(l, "noSessionsHint")
       )
     ) : /* @__PURE__ */ L.createElement(
-      no,
+      oo,
       {
         groups: z,
         collapsedAgents: a,
@@ -4801,12 +4809,12 @@ function so() {
     }
   ));
 }
-const lo = window.QwenPaw.host.React;
+const io = window.QwenPaw.host.React;
 var pn, gn;
 (gn = (pn = window.QwenPaw).registerRoutes) == null || gn.call(pn, "agent-trace", [
   {
     path: "/plugin/agent-trace",
-    component: so,
+    component: ro,
     label: v(ne(), "routeLabel"),
     icon: "🧭",
     priority: 44
@@ -4816,6 +4824,6 @@ var yn, qe, En;
 (En = (qe = (yn = window.QwenPaw.chat) == null ? void 0 : yn.rightHeader) == null ? void 0 : qe.add) == null || En.call(
   qe,
   "agent-trace",
-  lo.createElement(Gl),
+  io.createElement(Ql),
   { id: "agent-trace-dock" }
 );
