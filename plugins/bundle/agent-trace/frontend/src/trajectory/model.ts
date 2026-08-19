@@ -897,13 +897,18 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
 
   // Attach skill execution spans to their runs' turns, and stamp the
   // attributed records with the span hue for the ledger color strip.
+  // Hue strips only discriminate when more than one skill appears —
+  // with a single skill every row would carry the same color (noise);
+  // bypass rows keep their orange warning strip regardless.
+  const allSpans = spanTracker.spans();
+  const distinctSkills = new Set(allSpans.map((span) => span.skill)).size;
   const cellByIndex = new Map<number, TrajectoryRecord>();
   for (const turn of turns) {
     for (const group of turn.groups) {
       for (const cell of group.cells) cellByIndex.set(cell.index, cell);
     }
   }
-  for (const span of spanTracker.spans()) {
+  for (const span of allSpans) {
     const turn = spanTurns.get(span.id);
     if (turn) {
       (turn.skillSpans ??= []).push(span);
@@ -912,7 +917,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
       const cell = cellByIndex.get(recordIndex);
       if (cell) {
         cell.skillSpanId = span.id;
-        cell.skillSpanHue = span.colorHue;
+        cell.skillSpanHue = distinctSkills > 1 ? span.colorHue : undefined;
         cell.skillSpanBypass = span.bypass;
       }
     }

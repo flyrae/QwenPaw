@@ -24,7 +24,7 @@ import { formatSeconds, formatTokens, recordKindLabel } from "./records";
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
 const { useRef } = React;
-const { Tag } = host.antd;
+const { Tag, Tooltip } = host.antd;
 const { Text } = host.antd.Typography;
 const {
   CaretRightOutlined,
@@ -152,6 +152,8 @@ export interface LedgerProps {
   onLoadOlder: () => void;
   initialRecord?: TrajectoryRecord | null;
   emptyText?: string;
+  /** Open the span inspector for a skill used in a request pill. */
+  onSkillSpanOpen?: (skill: string, turn: number | null) => void;
 }
 
 function RecordRow({
@@ -281,28 +283,29 @@ function RecordRow({
           ⚡{record.inSkill}
         </Tag>
       ) : record.guidedSkill ? (
-        <Tag
+        <Tooltip
           title={`${record.guidedSkill} — ${
             record.guidedReason === "slash"
               ? t(storedLocale(), "guidedBySlash")
               : t(storedLocale(), "guidedByLoad")
           }`}
-          style={{
-            marginInlineEnd: 0,
-            fontSize: 10,
-            lineHeight: "16px",
-            flexShrink: 0,
-            maxWidth: 160,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            color: "#2f54eb",
-            background: "rgba(47,84,235,0.06)",
-            borderColor: "rgba(47,84,235,0.25)",
-          }}
         >
-          ∈{record.guidedSkill}
-        </Tag>
+          {/* Inference is deliberately quiet: plain colored text, no
+           * tag chrome — facts (⚡) get tags, inferences do not. */}
+          <Text
+            style={{
+              fontSize: 10,
+              flexShrink: 0,
+              maxWidth: 160,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              color: "#2f54eb",
+            }}
+          >
+            ∈{record.guidedSkill}
+          </Text>
+        </Tooltip>
       ) : null}
       {record.kind === "user" && record.skillName ? (
         <Tag
@@ -416,6 +419,7 @@ function BoundaryRow({
   cellCount,
   onToggle,
   onSelect,
+  onSkillSpanOpen,
 }: {
   turn: TrajectoryTurnModel;
   collapsed: boolean;
@@ -423,6 +427,7 @@ function BoundaryRow({
   cellCount: number;
   onToggle: () => void;
   onSelect: () => void;
+  onSkillSpanOpen?: (skill: string, turn: number | null) => void;
 }) {
   const locale = storedLocale();
   return (
@@ -472,16 +477,35 @@ function BoundaryRow({
           {cellCount} {t(locale, "events")}
         </Text>
         {turn.skillsUsed && turn.skillsUsed.length > 0 ? (
-          <Tag
-            color="geekblue"
-            title={turn.skillsUsed.join(", ")}
-            style={{ marginInlineEnd: 0, fontSize: 10, lineHeight: "16px" }}
+          /* Wrapper span keeps the click working even if the host's
+           * antd Tag version does not forward onClick (idempotent). */
+          <span
+            onClick={(event: ReactNS.MouseEvent<HTMLSpanElement>) => {
+              if (!onSkillSpanOpen) return;
+              event.stopPropagation();
+              onSkillSpanOpen(turn.skillsUsed![0], turn.turn);
+            }}
+            style={{
+              display: "inline-flex",
+              cursor: onSkillSpanOpen ? "pointer" : undefined,
+            }}
           >
-            📚 {turn.skillsUsed.slice(0, 2).join(" ")}
-            {turn.skillsUsed.length > 2
-              ? ` +${turn.skillsUsed.length - 2}`
-              : ""}
-          </Tag>
+            <Tag
+              color="geekblue"
+              title={turn.skillsUsed.join(", ")}
+              style={{
+                marginInlineEnd: 0,
+                fontSize: 10,
+                lineHeight: "16px",
+                cursor: "inherit",
+              }}
+            >
+              📚 {turn.skillsUsed.slice(0, 2).join(" ")}
+              {turn.skillsUsed.length > 2
+                ? ` +${turn.skillsUsed.length - 2}`
+                : ""}
+            </Tag>
+          </span>
         ) : null}
         <Tag
           color={STATUS_COLORS[turn.status] ?? "default"}
@@ -511,6 +535,7 @@ export function Ledger({
   onLoadOlder,
   initialRecord,
   emptyText,
+  onSkillSpanOpen,
 }: LedgerProps) {
   const locale = storedLocale();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -638,6 +663,12 @@ export function Ledger({
             cellCount={turn.groups[0]?.cells.length ?? 0}
             onToggle={() => onToggleTurn(turnNumber)}
             onSelect={() => onSelectedTurnChange(turnNumber)}
+            onSkillSpanOpen={
+              onSkillSpanOpen
+                ? (skill: string, turnNo: number | null) =>
+                    onSkillSpanOpen(skill, turnNo)
+                : undefined
+            }
           />
         );
       }

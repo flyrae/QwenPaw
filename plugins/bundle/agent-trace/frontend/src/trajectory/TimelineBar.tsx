@@ -323,6 +323,7 @@ export const TimelineBar = React.memo(function TimelineBar({
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [draft, setDraft] = useState<TrajectoryTimeRange | null>(null);
   const [hover, setHover] = useState<HoverPoint | null>(null);
+  const [hoverBand, setHoverBand] = useState<string | null>(null);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [panning, setPanning] = useState(false);
   const [viewport, setViewport] = useState<TrajectoryTimeRange | null>(null);
@@ -783,7 +784,7 @@ export const TimelineBar = React.memo(function TimelineBar({
                 left: 0,
                 right: 0,
                 bottom: 2,
-                height: 6,
+                height: 10,
                 pointerEvents: "none",
                 zIndex: 3,
               }}
@@ -798,33 +799,67 @@ export const TimelineBar = React.memo(function TimelineBar({
                 const title = `${band.bypass ? "⚠ " : ""}${band.skill} · ${
                   band.trigger
                 }${band.open ? ` · ${t(locale, "spanOpen")}` : ""}`;
+                const hovered = hoverBand === band.spanId;
+                const showsLabel = width > 0.14 && !band.bypass;
                 return (
-                  <span
-                    key={band.spanId}
-                    title={title}
-                    onClick={
-                      onSkillSpanSelect
-                        ? (event) => {
-                            event.stopPropagation();
-                            onSkillSpanSelect(band.spanId);
-                          }
-                        : undefined
-                    }
-                    style={{
-                      position: "absolute",
-                      left: `${Math.max(0, left) * 100}%`,
-                      width: `${width * 100}%`,
-                      top: 0,
-                      bottom: 0,
-                      borderRadius: 3,
-                      background: `hsla(${band.hue}, 65%, 55%, 0.55)`,
-                      border: band.bypass
-                        ? "1px dashed rgba(250,140,22,0.9)"
-                        : `1px solid hsla(${band.hue}, 55%, 45%, 0.8)`,
-                      pointerEvents: onSkillSpanSelect ? "auto" : "none",
-                      cursor: onSkillSpanSelect ? "pointer" : "default",
-                    }}
-                  />
+                  <Tooltip title={title} key={band.spanId}>
+                    <span
+                      onPointerDown={(event) => {
+                        // Keep the track's drag/selection logic from
+                        // racing the band's click.
+                        event.stopPropagation();
+                      }}
+                      onClick={
+                        onSkillSpanSelect
+                          ? (event) => {
+                              event.stopPropagation();
+                              onSkillSpanSelect(band.spanId);
+                            }
+                          : undefined
+                      }
+                      onMouseEnter={() => setHoverBand(band.spanId)}
+                      onMouseLeave={() =>
+                        setHoverBand((current) =>
+                          current === band.spanId ? null : current,
+                        )
+                      }
+                      style={{
+                        position: "absolute",
+                        left: `${Math.max(0, left) * 100}%`,
+                        width: `${width * 100}%`,
+                        top: 0,
+                        bottom: 0,
+                        borderRadius: 3,
+                        background: `hsla(${band.hue}, 65%, ${
+                          hovered ? 62 : 55
+                        }%, ${hovered ? 0.85 : 0.55})`,
+                        border: band.bypass
+                          ? "1px dashed rgba(250,140,22,0.9)"
+                          : `1px solid hsla(${band.hue}, 55%, 45%, 0.8)`,
+                        pointerEvents: onSkillSpanSelect ? "auto" : "none",
+                        cursor: onSkillSpanSelect ? "pointer" : "default",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {showsLabel ? (
+                        <span
+                          style={{
+                            fontSize: 9,
+                            lineHeight: "10px",
+                            color: "rgba(255,255,255,0.92)",
+                            whiteSpace: "nowrap",
+                            pointerEvents: "none",
+                            textShadow: "0 0 2px rgba(0,0,0,0.4)",
+                          }}
+                        >
+                          {band.skill}
+                        </span>
+                      ) : null}
+                    </span>
+                  </Tooltip>
                 );
               })}
             </div>

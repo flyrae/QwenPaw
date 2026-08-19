@@ -827,6 +827,20 @@ export function SessionTraceView({
                 setSelectedIndex(index);
                 setSelectedTurn(null);
               }}
+              onSkillSpanOpen={(skill: string, turnNo: number | null) => {
+                const all = turns.flatMap((item) => item.skillSpans ?? []);
+                // Prefer the span of the clicked request, else earliest.
+                const byTurn =
+                  turnNo !== null
+                    ? (
+                        turns.find((item) => item.turn === turnNo)
+                          ?.skillSpans ?? []
+                      ).find((span) => span.skill === skill)
+                    : undefined;
+                const chosen =
+                  byTurn ?? all.find((span) => span.skill === skill);
+                if (chosen) setSelectedSpanId(chosen.id);
+              }}
               onSelectedTurnChange={(turn: number) => {
                 setSelectedTurn(turn);
                 setSelectedIndex(null);

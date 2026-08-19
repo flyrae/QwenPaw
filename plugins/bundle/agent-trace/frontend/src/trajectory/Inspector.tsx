@@ -1097,7 +1097,7 @@ export function Inspector({
                             }
                             style={{ marginInlineEnd: 0, fontSize: 10 }}
                           >
-                            {change.status}
+                            {t(locale, RESET_STATUS_LABEL[change.status])}
                           </Tag>
                           <Text code style={{ fontSize: 11, flexShrink: 0 }}>
                             {change.role}
@@ -1138,22 +1138,33 @@ export function Inspector({
                 )} ${t(locale, "charUnit")}`}
               />
             ) : null}
-            {selected.inputNew.map((message, index) => (
-              <div key={index}>
-                <div
-                  style={{ display: "flex", gap: 8, alignItems: "baseline" }}
-                >
-                  <Text code style={{ fontSize: 11, flexShrink: 0 }}>
-                    {message.role}
-                  </Text>
-                  <Text type="secondary" style={{ fontSize: 11 }}>
-                    {formatTokens(message.chars)} {t(locale, "charUnit")}
-                    {message.toolCallId ? ` · ${message.toolCallId}` : ""}
-                  </Text>
-                </div>
-                {message.text ? <Pre value={message.text} /> : null}
-              </div>
-            ))}
+            {selected.inputNew.length > 0 ? (
+              <Collapse
+                size="small"
+                defaultActiveKey={
+                  selected.inputNew.length <= 5 ? ["messages"] : []
+                }
+                items={[
+                  {
+                    key: "messages",
+                    label: `${t(locale, "inputMessages")} (${
+                      selected.inputNew.length
+                    })`,
+                    children: (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selected.inputNew.map((message, index) => (
+                          <InputMessageItem
+                            key={index}
+                            message={message}
+                            locale={locale}
+                          />
+                        ))}
+                      </div>
+                    ),
+                  },
+                ]}
+              />
+            ) : null}
           </div>
         ),
       });
@@ -1349,6 +1360,66 @@ export function Inspector({
         <Tabs size="small" items={items} tabBarStyle={{ marginBottom: 8 }} />
       </div>
     </aside>
+  );
+}
+
+const RESET_STATUS_LABEL: Record<
+  string,
+  "resetKept" | "resetRemoved" | "resetRewritten" | "resetAdded"
+> = {
+  kept: "resetKept",
+  removed: "resetRemoved",
+  rewritten: "resetRewritten",
+  added: "resetAdded",
+};
+
+/** One input message with a 3-line preview and a show-full toggle. */
+function InputMessageItem({
+  message,
+  locale,
+}: {
+  message: { role: string; chars: number; text?: string; toolCallId?: string };
+  locale: ReturnType<typeof storedLocale>;
+}) {
+  const [expanded, setExpanded] = React.useState(false);
+  const text = message.text ?? "";
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+        <Text code style={{ fontSize: 11, flexShrink: 0 }}>
+          {message.role}
+        </Text>
+        <Text type="secondary" style={{ fontSize: 11 }}>
+          {formatTokens(message.chars)} {t(locale, "charUnit")}
+          {message.toolCallId ? ` · ${message.toolCallId}` : ""}
+        </Text>
+        {text.length > 200 ? (
+          <a
+            style={{ fontSize: 11 }}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            {expanded
+              ? t(locale, "inputCollapseText")
+              : t(locale, "inputExpand")}
+          </a>
+        ) : null}
+      </div>
+      {text ? (
+        <div
+          style={
+            expanded
+              ? undefined
+              : {
+                  maxHeight: 57,
+                  overflow: "hidden",
+                  position: "relative",
+                }
+          }
+        >
+          <Pre value={text} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 

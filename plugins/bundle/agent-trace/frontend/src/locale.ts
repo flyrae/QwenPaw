@@ -128,6 +128,23 @@ const STRINGS = {
     resetMsgs: "条",
     resetRoles: "role 变化",
     resetChanges: "逐条变化",
+    resetKept: "保留",
+    resetRemoved: "移除",
+    resetRewritten: "重写",
+    resetAdded: "新增",
+    legendTitle: "图例",
+    legendLoad: "技能加载：模型通过 Skill 工具读取了该技能的完整说明",
+    legendResource: "技能资源触碰（蓝=加载说明书后使用；橙=未加载直接使用）",
+    legendGuided:
+      "时间归属：技能激活后按其指示执行的普通调用（推断，悬停看依据）",
+    legendStripTitle: "行色条：",
+    legendStrip: "该行归属的技能执行段颜色（橙=旁路）",
+    legendBandTitle: "时间线色带：",
+    legendBand:
+      "技能执行段（斜杠/加载/资源三锚点起，run 结束止），点击查看详情",
+    inputMessages: "输入消息",
+    inputExpand: "展开全文",
+    inputCollapseText: "收起",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -259,6 +276,25 @@ const STRINGS = {
     resetMsgs: "msgs",
     resetRoles: "Role changes",
     resetChanges: "Per-message changes",
+    resetKept: "kept",
+    resetRemoved: "removed",
+    resetRewritten: "rewritten",
+    resetAdded: "added",
+    legendTitle: "Legend",
+    legendLoad:
+      "Skill load: the model read the skill's full instructions via the Skill tool",
+    legendResource:
+      "Skill resource touch (blue = after loading the doc; orange = used without loading)",
+    legendGuided:
+      "Temporal attribution: an ordinary call after the skill became active (inferred; hover for basis)",
+    legendStripTitle: "Row strip: ",
+    legendStrip: "color of the row's skill execution span (orange = bypass)",
+    legendBandTitle: "Timeline band: ",
+    legendBand:
+      "skill execution span (slash/load/resource anchor → run end); click for details",
+    inputMessages: "Input messages",
+    inputExpand: "show full text",
+    inputCollapseText: "collapse",
   },
 } as const;
 
