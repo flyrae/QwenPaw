@@ -17,7 +17,11 @@ import type {
   UsageInfo,
 } from "./records";
 import { epochMs } from "./records";
-import { SkillSpanTracker } from "./skillSpans";
+import {
+  SkillSpanTracker,
+  buildSkillFeatures,
+  matchSkillFeatures,
+} from "./skillSpans";
 
 interface PendingCell {
   cell: TrajectoryRecord;
@@ -148,6 +152,9 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   // (design: DESIGN.md 技能执行段). turnOfSpan maps spans to their run.
   const spanTracker = new SkillSpanTracker();
   const spanTurns = new Map<string, TrajectoryTurnModel>();
+  // Content-match index per skill, built from loaded SKILL.md bodies
+  // (the Skill tool result text) — WP4 attribution evidence.
+  const skillFeatures = new Map<string, string[]>();
   let index = 0;
   let runNumber = 0;
 
@@ -625,20 +632,42 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
             }
           }
         }
+        // Content attribution: a distinctive string from a loaded
+        // SKILL.md (script name, fenced-command token) in the input.
+        let contentSkill: string | undefined;
+        let contentFeature: string | undefined;
+        if (!skillName && !inSkill && toolInputText && skillFeatures.size > 0) {
+          const match = matchSkillFeatures(toolInputText, skillFeatures);
+          if (match) {
+            contentSkill = match.skill;
+            contentFeature = match.feature;
+          }
+        }
         // Temporal attribution: after a skill becomes active in this
         // run (slash command or Skill load), ordinary tool calls are
         // plausibly following its instructions — latest active skill.
         let guidedSkill: string | undefined;
         let guidedReason: "slash" | "load" | undefined;
-        if (!skillName && !inSkill && activeRunSkills.length > 0) {
+        if (
+          !skillName &&
+          !inSkill &&
+          !contentSkill &&
+          activeRunSkills.length > 0
+        ) {
           const [name, reason] = activeRunSkills[activeRunSkills.length - 1];
           guidedSkill = name;
           guidedReason = reason;
         }
-        // Feed the span tracker: path evidence first, temporal second.
+        // Feed the span tracker: path > content > temporal.
         const spanId = spanTracker.onToolCall({
           attribution: inSkill
             ? { skill: inSkill, kind: "path", detail: "skill dir in input" }
+            : contentSkill
+            ? {
+                skill: contentSkill,
+                kind: "content",
+                detail: `“${contentFeature}” in input (skill doc)`,
+              }
             : guidedSkill
             ? {
                 skill: guidedSkill,
@@ -673,8 +702,8 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           skillName,
           inSkill,
           inSkillLoaded: inSkill ? loadedSkills.has(inSkill) : undefined,
-          guidedSkill,
-          guidedReason,
+          guidedSkill: guidedSkill ?? contentSkill,
+          guidedReason: guidedReason ?? (contentSkill ? "load" : undefined),
           skillSpanId: spanId ?? undefined,
           toolInput: callData.input ? String(callData.input) : undefined,
         };
@@ -728,6 +757,13 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           // loaded SKILL.md body preview is noise on the row.
           if (!pending.cell.skillName) {
             pending.cell.text = `${pending.cell.text}${outputPreview}`;
+          } else if (output) {
+            // WP4: index the loaded SKILL.md body for content matching
+            // (rebuild on every load — the skill may have been edited).
+            skillFeatures.set(
+              pending.cell.skillName,
+              buildSkillFeatures(output),
+            );
           }
           pending.cell.raw = [
             ...(pending.call

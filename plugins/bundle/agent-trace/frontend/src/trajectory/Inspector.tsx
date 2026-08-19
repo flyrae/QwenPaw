@@ -1370,7 +1370,13 @@ export function SpanInspector({
                 }}
               >
                 <Tag
-                  color={evidence.kind === "path" ? "geekblue" : "default"}
+                  color={
+                    evidence.kind === "path"
+                      ? "geekblue"
+                      : evidence.kind === "content"
+                      ? "blue"
+                      : "default"
+                  }
                   style={{ marginInlineEnd: 0, fontSize: 10 }}
                 >
                   {evidence.kind}

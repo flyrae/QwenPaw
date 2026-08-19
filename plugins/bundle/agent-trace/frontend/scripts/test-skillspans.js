@@ -1,8 +1,8 @@
 /**
  * Node test for the skill-span state machine (trajectory/skillSpans.ts).
  * Compiles the single TS module with tsc into a temp dir, then runs the
- * edge-case matrix from DESIGN.md as plain assertions inside the build
- * guard chain.
+ * edge-case matrix from DESIGN.md plus the WP4 feature-index cases as
+ * plain assertions inside the build guard chain.
  */
 const { execFileSync } = require("child_process");
 const fs = require("fs");
@@ -33,10 +33,14 @@ execFileSync(
   { stdio: "inherit" },
 );
 
-const { SkillSpanTracker, spanDurationMs, spanEndT } = require(path.join(
-  tmp,
-  "skillSpans.js",
-));
+const {
+  SkillSpanTracker,
+  buildSkillFeatures,
+  matchSkillFeatures,
+  skillHue,
+  spanDurationMs,
+  spanEndT,
+} = require(path.join(tmp, "skillSpans.js"));
 
 let failures = 0;
 function check(name, cond) {
@@ -81,7 +85,6 @@ function check(name, cond) {
     seq: 2,
     t: 150,
   });
-  // no run/end — next run starts
   tr.onRunStart();
   const spans = tr.spans();
   check(
@@ -191,11 +194,62 @@ function check(name, cond) {
 }
 
 // ── determinism: hue stable across calls ───────────────────────────────
+check(
+  "hue deterministic",
+  skillHue("docx") === skillHue("docx") && Number.isInteger(skillHue("docx")),
+);
+
+// ── WP4: feature index + content matching ──────────────────────────────
 {
-  const { skillHue } = require(path.join(tmp, "skillSpans.js"));
+  const body = [
+    "# PDF skill",
+    "",
+    "```bash",
+    "python scripts/pdf_extract.py --track-changes=all input.docx",
+    "```",
+    "",
+    "```bash",
+    "pip install python-docx",
+    "```",
+  ].join("\n");
+  const feats = buildSkillFeatures(body);
+  const featSet = new Set(feats);
+  check("W4 script filename indexed", featSet.has("pdf_extract.py"));
+  check("W4 distinctive flag indexed", featSet.has("--track-changes=all"));
   check(
-    "hue deterministic",
-    skillHue("docx") === skillHue("docx") && Number.isInteger(skillHue("docx")),
+    "W4 generic tokens excluded",
+    !featSet.has("install") && !featSet.has("python"),
+  );
+  const indexes = new Map([
+    ["pdf", feats],
+    [
+      "xlsx",
+      buildSkillFeatures(
+        "# xlsx\n```bash\npython scripts/xlsx_run.py data.xlsx\n```",
+      ),
+    ],
+  ]);
+  check(
+    "W4 unique hit",
+    matchSkillFeatures(
+      "cd /tmp && python scripts/pdf_extract.py a.docx",
+      indexes,
+    )?.skill === "pdf",
+  );
+  check(
+    "W4 no hit returns null",
+    matchSkillFeatures("echo hello world", indexes) === null,
+  );
+  const both = new Map([
+    ["a", buildSkillFeatures("```bash\npython scripts/shared_tool.py\n```")],
+    [
+      "b",
+      buildSkillFeatures("# b\n```bash\npython scripts/shared_tool.py\n```"),
+    ],
+  ]);
+  check(
+    "W4 ambiguous returns null",
+    matchSkillFeatures("python scripts/shared_tool.py", both) === null,
   );
 }
 

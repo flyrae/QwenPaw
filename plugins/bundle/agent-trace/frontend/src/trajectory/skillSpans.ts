@@ -20,8 +20,10 @@
 export type SkillSpanTrigger = "slash" | "load" | "resource";
 export type SkillSpanEndKind = "run_end" | "last_activity";
 
+export type SkillEvidenceKind = "path" | "content" | "temporal";
+
 export interface SkillEvidence {
-  kind: "path" | "temporal";
+  kind: SkillEvidenceKind;
   detail: string;
   recordIndex: number;
 }
@@ -55,7 +57,7 @@ export function skillHue(skill: string): number {
 
 export interface SpanToolAttribution {
   skill: string;
-  kind: "path" | "temporal";
+  kind: SkillEvidenceKind;
   detail: string;
 }
 
@@ -191,4 +193,105 @@ export function spanDurationMs(span: SkillSpan): number | null {
   const end = span.lastActivityT ?? span.endT;
   if (end === null) return null;
   return Math.max(0, end - span.startT);
+}
+
+// ── Content-match attribution (WP4) ─────────────────────────────────────
+//
+// When a skill is loaded (Skill tool result = the SKILL.md body), we
+// index its distinctive strings: script filenames and long tokens from
+// fenced command blocks. A later tool call whose input contains one of
+// those features is attributed with CONTENT evidence — stronger than
+// temporal, weaker than a literal dir-path touch.
+
+const GENERIC_TOKENS = new Set([
+  "python",
+  "python3",
+  "pip",
+  "node",
+  "npm",
+  "cd",
+  "dir",
+  "echo",
+  "print",
+  "import",
+  "export",
+  "command",
+  "output",
+  "input",
+  "path",
+  "file",
+  "files",
+  "true",
+  "false",
+  "null",
+  "shell",
+  "bash",
+  "powershell",
+  "windows",
+  "linux",
+  "macos",
+  "install",
+  "install-g",
+  "sudo",
+  "run",
+  "scripts",
+  "script",
+  "content",
+  "params",
+  "return",
+  "string",
+  "number",
+  "const",
+  "await",
+  "async",
+  "function",
+  "default",
+  "options",
+  "results",
+]);
+
+/** Build the feature index from a loaded SKILL.md body. */
+export function buildSkillFeatures(body: string): string[] {
+  const feats = new Set<string>();
+  for (const m of body.matchAll(
+    /(?:scripts[/\\])([\w.\-]+\.(?:py|js|mjs|sh|json|ts))/gi,
+  )) {
+    feats.add(m[1].toLowerCase());
+  }
+  for (const fence of body.matchAll(/```[a-z]*\n([\s\S]*?)```/g)) {
+    for (const tok of fence[1].matchAll(/[\w./=\-]{6,}/g)) {
+      const t = tok[0].toLowerCase();
+      if (!GENERIC_TOKENS.has(t)) feats.add(t);
+    }
+  }
+  return [...feats];
+}
+
+export interface ContentMatch {
+  skill: string;
+  feature: string;
+}
+
+/** Match a tool-call input against the per-skill feature indexes.
+ * Unique hit → that skill; ambiguous (2+ skills) or none → null. */
+export function matchSkillFeatures(
+  input: string,
+  indexes: ReadonlyMap<string, readonly string[]>,
+): ContentMatch | null {
+  const norm = input.toLowerCase();
+  let hit: ContentMatch | null = null;
+  let ambiguous = false;
+  for (const [skill, feats] of indexes) {
+    for (const feat of feats) {
+      if (norm.includes(feat)) {
+        if (hit === null) {
+          hit = { skill, feature: feat };
+        } else if (hit.skill !== skill) {
+          ambiguous = true;
+        }
+        break;
+      }
+    }
+  }
+  return ambiguous ? null : hit;
 }
