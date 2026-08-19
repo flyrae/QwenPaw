@@ -997,9 +997,6 @@ export function Inspector({
         label: t(locale, "inputTab"),
         children: (
           <div style={{ display: "grid", gap: 8 }}>
-            <Text type="secondary" style={{ fontSize: 11 }}>
-              {t(locale, "inputNewNote")}
-            </Text>
             {selected.contextReset ? (
               <Text type="warning" style={{ fontSize: 12 }}>
                 {t(locale, "contextReset")}

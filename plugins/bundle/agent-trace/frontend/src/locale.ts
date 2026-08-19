@@ -99,8 +99,6 @@ const STRINGS = {
     outputSize: "输出大小",
     beforeTruncation: "截断前",
     inputTab: "输入",
-    inputNewNote:
-      "仅显示相对上一次模型调用新增的消息——工具轮之后即工具结果进入模型的形态",
     contextReset: "上下文前缀发生变化（压缩/重写），本次已全量重记",
     inputTotal: "输入总量",
   },
@@ -204,8 +202,6 @@ const STRINGS = {
     outputSize: "Output size",
     beforeTruncation: "before truncation",
     inputTab: "Input",
-    inputNewNote:
-      "Only messages appended since the previous model call — after a tool round this is how tool results enter the model input",
     contextReset:
       "Context prefix changed (compaction / rewrite); full input re-recorded",
     inputTotal: "Total input",
