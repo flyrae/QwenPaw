@@ -905,6 +905,16 @@ export function Inspector({
             }
           />
         ) : null}
+        {selected.guidedSkill ? (
+          <KeyValue
+            label={t(locale, "skillGuided")}
+            value={`∈ ${selected.guidedSkill}（${
+              selected.guidedReason === "slash"
+                ? t(locale, "guidedBySlash")
+                : t(locale, "guidedByLoad")
+            }）`}
+          />
+        ) : null}
         {selected.toolOutputChars ? (
           <KeyValue
             label={t(locale, "outputSize")}

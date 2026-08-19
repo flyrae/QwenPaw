@@ -154,6 +154,12 @@ export interface TrajectoryRecord {
   inSkill?: string;
   /* whether that skill had been loaded (Skill tool) before this call */
   inSkillLoaded?: boolean;
+  /* skill whose instructions plausibly guided this call (temporal
+   * attribution inside the run — inferred, not declared) */
+  guidedSkill?: string;
+  /* why guidedSkill was attributed: explicit slash command vs a Skill
+   * tool load earlier in the same run */
+  guidedReason?: "slash" | "load";
   /* pre-truncation output size (from tool/result) */
   toolOutputChars?: number;
   toolOutputBytes?: number;

@@ -139,6 +139,10 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   // that touch skill resources (layer 3 of skill observability).
   let skillDirs: Array<[string, string]> = [];
   const loadedSkills = new Set<string>();
+  // Skills active in the CURRENT run (slash injection or a Skill load)
+  // with why — used for temporal "guided by" attribution of ordinary
+  // tool calls. Cleared when the run ends.
+  const activeRunSkills: Array<[string, "slash" | "load"]> = [];
   let index = 0;
   let runNumber = 0;
 
@@ -218,7 +222,11 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         if (!slashSkill && messages.length > 0) {
           slashSkill = matchSlashSkill(String(messages[0]?.text ?? ""));
         }
-        if (slashSkill) loadedSkills.add(slashSkill);
+        if (slashSkill) {
+          loadedSkills.add(slashSkill);
+          activeRunSkills.length = 0;
+          activeRunSkills.push([slashSkill, "slash"]);
+        }
         const userCell: TrajectoryRecord = {
           index: ++index,
           runIndex: runNumber,
@@ -240,6 +248,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
       case "run/end": {
         const turn = turnByRun.get(event.run_id);
         if (openRunId === event.run_id) openRunId = "";
+        activeRunSkills.length = 0;
         channelByRun.delete(event.run_id);
         userCellByRun.delete(event.run_id);
         const status = String(data.status ?? "unknown");
@@ -574,7 +583,10 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         const toolName = String(callData.name ?? "?");
         const skillName =
           toolName === "Skill" ? parseSkillName(callData.input) : undefined;
-        if (skillName) loadedSkills.add(skillName);
+        if (skillName) {
+          loadedSkills.add(skillName);
+          activeRunSkills.push([skillName, "load"]);
+        }
         const toolInputText = callData.input
           ? String(callData.input)
           : undefined;
@@ -589,6 +601,16 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
               break;
             }
           }
+        }
+        // Temporal attribution: after a skill becomes active in this
+        // run (slash command or Skill load), ordinary tool calls are
+        // plausibly following its instructions — latest active skill.
+        let guidedSkill: string | undefined;
+        let guidedReason: "slash" | "load" | undefined;
+        if (!skillName && !inSkill && activeRunSkills.length > 0) {
+          const [name, reason] = activeRunSkills[activeRunSkills.length - 1];
+          guidedSkill = name;
+          guidedReason = reason;
         }
         const cell: TrajectoryRecord = {
           index: ++index,
@@ -606,6 +628,8 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           skillName,
           inSkill,
           inSkillLoaded: inSkill ? loadedSkills.has(inSkill) : undefined,
+          guidedSkill,
+          guidedReason,
           toolInput: callData.input ? String(callData.input) : undefined,
         };
         appendCell(event.run_id, cell);

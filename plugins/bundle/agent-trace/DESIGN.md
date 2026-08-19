@@ -137,6 +137,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | （本次） | 标记行细分：审批（🛡盾牌/volcano）、回执（📤发送/cyan）、子代理（🚀火箭/geekblue）、提示词（📄文档/green）、错误（⭕红）各有专属标签与图标，不再共用"标记"；Inspector Kind 字段同步 |
 | （v0.3.1） | **输入/信息量归因**：`llm/call.messages_meta` 按 role 聚合字符记账（不存内容，固定大小）；`tool/result.output_chars/output_bytes` 记录截断前完整大小；请求检查器 Usage 页新增**输入构成四桶**（system/user/assistant/tool，字符→token 按模型系数估算并标注）、**最大单条工具消息**、**跨轮输入增量对账**（input[n]−input[n−1]，配合缓存命中显示增量被吸收情况）；工具记录 Summary 显示截断前输出大小；91 测试 |
 | （v0.3.3） | **技能观测**：`Skill` 工具调用聚合为 `skills {name: count}`（列表/stats 端点）；台账技能行（geekblue 📚 + 已加载大小，不再显示 JSON 原文与正文预览）、请求 pill 📚 角标、会话列表/统计条技能段；95 测试 |
+| （v0.3.6） | **技能归属（时间推断）**：run 内技能激活（斜杠注入/Skill 加载）后的普通工具调用标 `∈技能`（浅蓝，悬停注明依据：斜杠指定=高置信 / 加载后执行=推断），run 结束即清；检查器新增「技能归属」行；与 ⚡（直接触碰技能资源=事实）区分置信度 |
 | （v0.3.5） | **斜杠命令技能通路**：`/skill` 命令把整个 `<skill>` 块内联进 run/start 的 query（第三条披露路径）——前端解析后用户行显示 `/xlsx` 标签、计入请求 pill 的 skillsUsed 与 loadedSkills；后端 `_slash_skill_name` 在两处折叠中聚合进 skills 统计；真实会话实测四处呈现通过 |
 | （v0.3.4） | **第 3 层技能资源归因**：从 header `<agent-skills>` 提取技能目录映射（跨 run 持久），工具调用输入含技能目录路径即标 `⚡技能名`——**已加载后使用（geekblue）vs 未加载直接使用（orange 旁路）**按事件序判定；统计条汇总 `⚡ 未加载即执行`；纯前端零采集改动 |
 | （v0.3.2） | **增量输入可观测**：`messages_new` 记录每次调用相对上次新增的输入消息（内容截断+脱敏、带 tool_call_id），指纹公共前缀对比、前缀变化（压缩/重写）触发 `context_reset` 全量重记；助手记录检查器新增**「输入」页**（新增消息列表 + 输入总量 + reset 警告）——回答"工具输出怎么进入模型"；94 测试 |

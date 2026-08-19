@@ -272,6 +272,29 @@ function RecordRow({
         >
           ⚡{record.inSkill}
         </Tag>
+      ) : record.guidedSkill ? (
+        <Tag
+          title={`${record.guidedSkill} — ${
+            record.guidedReason === "slash"
+              ? t(storedLocale(), "guidedBySlash")
+              : t(storedLocale(), "guidedByLoad")
+          }`}
+          style={{
+            marginInlineEnd: 0,
+            fontSize: 10,
+            lineHeight: "16px",
+            flexShrink: 0,
+            maxWidth: 160,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            color: "#2f54eb",
+            background: "rgba(47,84,235,0.06)",
+            borderColor: "rgba(47,84,235,0.25)",
+          }}
+        >
+          ∈{record.guidedSkill}
+        </Tag>
       ) : null}
       {record.kind === "user" && record.skillName ? (
         <Tag
