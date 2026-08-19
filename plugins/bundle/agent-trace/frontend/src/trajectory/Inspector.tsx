@@ -15,7 +15,6 @@ import type { TrajectoryRecord } from "./records";
 import { spanDurationMs } from "./skillSpans";
 import type { SkillSpan } from "./skillSpans";
 import {
-  estimateTokensFromChars,
   formatEpochMs,
   formatSeconds,
   formatThroughput,
@@ -290,9 +289,9 @@ const ROLE_LABEL_KEYS: Record<
 };
 
 /**
- * Input composition buckets (chars only, from size-only capture) with
- * chars→tokens estimates labelled as such — totals are exact, the
- * per-bucket token split is an estimate by model-family ratio.
+ * Input composition: per-bucket CHARACTER counts and their share of the
+ * message-borne input (real chars), plus the run's REAL token totals
+ * from the provider usage — no estimated per-bucket tokens.
  */
 function InputCompositionSection({
   request,
@@ -303,7 +302,6 @@ function InputCompositionSection({
 }) {
   const composition = request.inputComposition;
   if (!composition) return null;
-  const model = request.models[0];
   const rows: ReactNS.ReactNode[] = [];
   const known = new Set<string>(ROLE_BUCKET_ORDER);
   const orderedRoles = [
@@ -312,20 +310,16 @@ function InputCompositionSection({
       (role) => !known.has(role) && composition.charsByRole[role],
     ),
   ];
+  const total = composition.totalChars || 1;
   for (const role of orderedRoles) {
     const chars = composition.charsByRole[role];
     const labelKey = ROLE_LABEL_KEYS[role] ?? "roleOther";
+    const share = Math.round((chars / total) * 100);
     rows.push(
       <KeyValue
         key={role}
         label={t(locale, labelKey)}
-        value={`${formatTokens(chars)} ${t(
-          locale,
-          "charUnit",
-        )} · ~${formatTokens(estimateTokensFromChars(chars, model))} tok ${t(
-          locale,
-          "estimatedTag",
-        )}`}
+        value={`${formatTokens(chars)} ${t(locale, "charUnit")} · ${share}%`}
       />,
     );
   }
@@ -347,11 +341,17 @@ function InputCompositionSection({
         {t(locale, "inputComposition")}
       </Text>
       {rows}
+      {request.inputTokens > 0 ? (
+        <KeyValue
+          label={t(locale, "realInputTokens")}
+          value={`${formatTokens(request.inputTokens)} tok`}
+        />
+      ) : null}
       <Text
         type="secondary"
         style={{ fontSize: 11, display: "block", padding: "2px 0" }}
       >
-        {t(locale, "estimateNote")}
+        {t(locale, "compositionNote")}
       </Text>
       {request.growth ? (
         <>

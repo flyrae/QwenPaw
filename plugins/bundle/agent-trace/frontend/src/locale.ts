@@ -92,6 +92,9 @@ const STRINGS = {
     charUnit: "字",
     estimatedTag: "（估算）",
     estimateNote: "字符→token 按模型系数估算，仅供参考",
+    realInputTokens: "输入 token（实测）",
+    compositionNote:
+      "桶按消息字符占比呈现；实测 token 为计费口径总量（含带外工具结果）",
     maxToolMsg: "最大单条工具消息",
     growthVsPrev: "较上一轮输入增量",
     firstRound: "首轮",
@@ -241,6 +244,9 @@ const STRINGS = {
     charUnit: "chars",
     estimatedTag: "(est.)",
     estimateNote: "chars→tokens uses a per-model ratio — estimates only",
+    realInputTokens: "Input tokens (measured)",
+    compositionNote:
+      "buckets show message char shares; measured tokens are the billed total (out-of-band tool results included)",
     maxToolMsg: "Largest tool message",
     growthVsPrev: "Input growth vs prev round",
     firstRound: "First round",
