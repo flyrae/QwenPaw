@@ -228,6 +228,25 @@ function RecordRow({
       >
         {recordKindLabel(record, storedLocale())}
       </Tag>
+      {record.kind === "message" &&
+      record.model &&
+      record.model !== "unknown" ? (
+        <Tag
+          title={record.model}
+          style={{
+            marginInlineEnd: 0,
+            fontSize: 10,
+            lineHeight: "16px",
+            flexShrink: 0,
+            maxWidth: 160,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {record.model}
+        </Tag>
+      ) : null}
       <span
         style={{
           flex: 1,
