@@ -99,6 +99,8 @@ const STRINGS = {
     outputSize: "输出大小",
     beforeTruncation: "截断前",
     inputTab: "输入",
+    skillLoadKind: "技能",
+    skillLoaded: "已加载",
     contextReset: "上下文前缀发生变化（压缩/重写），本次已全量重记",
     inputTotal: "输入总量",
   },
@@ -202,6 +204,8 @@ const STRINGS = {
     outputSize: "Output size",
     beforeTruncation: "before truncation",
     inputTab: "Input",
+    skillLoadKind: "Skill",
+    skillLoaded: "loaded",
     contextReset:
       "Context prefix changed (compaction / rewrite); full input re-recorded",
     inputTotal: "Total input",

@@ -211,9 +211,11 @@ function RecordRow({
       </span>
       <Tag
         color={
-          (record.markerKind && MARKER_META[record.markerKind]?.color) ||
-          KIND_COLORS[record.kind] ||
-          "default"
+          record.skillName
+            ? "geekblue"
+            : (record.markerKind && MARKER_META[record.markerKind]?.color) ||
+              KIND_COLORS[record.kind] ||
+              "default"
         }
         icon={
           (record.markerKind && MARKER_META[record.markerKind]?.icon) ||
@@ -226,7 +228,9 @@ function RecordRow({
           flexShrink: 0,
         }}
       >
-        {recordKindLabel(record, storedLocale())}
+        {record.skillName
+          ? t(storedLocale(), "skillLoadKind")
+          : recordKindLabel(record, storedLocale())}
       </Tag>
       {record.kind === "message" &&
       record.model &&
@@ -261,6 +265,23 @@ function RecordRow({
           <Text type="secondary" style={{ fontSize: 12 }}>
             {receiptLabel(record, storedLocale())}
           </Text>
+        ) : record.skillName ? (
+          <>
+            <Text strong style={{ fontSize: 12 }}>
+              {record.skillName}
+            </Text>
+            {record.toolError ? (
+              <Text type="danger" style={{ fontSize: 12 }}>
+                {` → ${record.toolError}`}
+              </Text>
+            ) : record.toolOutputChars ? (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {` · ${t(storedLocale(), "skillLoaded")} ${formatTokens(
+                  record.toolOutputChars,
+                )} ${t(storedLocale(), "charUnit")}`}
+              </Text>
+            ) : null}
+          </>
         ) : record.kind === "tool" && record.toolName ? (
           <>
             <Text strong style={{ fontSize: 12 }}>
@@ -379,6 +400,18 @@ function BoundaryRow({
         <Text type="secondary" style={{ fontSize: 11 }}>
           {cellCount} {t(locale, "events")}
         </Text>
+        {turn.skillsUsed && turn.skillsUsed.length > 0 ? (
+          <Tag
+            color="geekblue"
+            title={turn.skillsUsed.join(", ")}
+            style={{ marginInlineEnd: 0, fontSize: 10, lineHeight: "16px" }}
+          >
+            📚 {turn.skillsUsed.slice(0, 2).join(" ")}
+            {turn.skillsUsed.length > 2
+              ? ` +${turn.skillsUsed.length - 2}`
+              : ""}
+          </Tag>
+        ) : null}
         <Tag
           color={STATUS_COLORS[turn.status] ?? "default"}
           style={{ marginInlineEnd: 0, fontSize: 10, lineHeight: "16px" }}

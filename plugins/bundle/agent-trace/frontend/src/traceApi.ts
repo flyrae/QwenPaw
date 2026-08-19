@@ -17,6 +17,8 @@ export interface SessionSummary {
   total_tokens: number;
   status: string;
   size_bytes: number;
+  /** Skill loads aggregated per skill name (builtin Skill tool calls). */
+  skills?: Record<string, number>;
 }
 
 export interface TraceEvent {
@@ -50,6 +52,7 @@ export interface SessionStats {
   decode_ms_total: number;
   ttft_ms_avg: number | null;
   ttft_ms_first: number | null;
+  skills?: Record<string, number>;
   [key: string]: unknown;
 }
 

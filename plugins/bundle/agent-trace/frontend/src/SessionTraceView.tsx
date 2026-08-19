@@ -517,6 +517,13 @@ export function SessionTraceView({
     if (summary) {
       parts.push(formatBytes(summary.size_bytes));
     }
+    if (sessionStats.skills) {
+      const skillText = Object.entries(sessionStats.skills)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => `${name} ×${count}`)
+        .join(" · ");
+      if (skillText) parts.push(`📚 ${skillText}`);
+    }
     return parts.join(" | ");
   }, [sessionStats, summary, locale]);
 

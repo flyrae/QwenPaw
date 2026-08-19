@@ -148,6 +148,8 @@ export interface TrajectoryRecord {
   toolName?: string;
   toolInput?: string;
   toolOutput?: string;
+  /* skill-load row (builtin Skill tool): the loaded skill's name */
+  skillName?: string;
   /* pre-truncation output size (from tool/result) */
   toolOutputChars?: number;
   toolOutputBytes?: number;
@@ -183,6 +185,8 @@ export interface TrajectoryTurnModel {
   status: string;
   durationMs: number | null;
   groups: TrajectoryGroupModel[];
+  /** Skill names loaded within this request (from Skill tool calls). */
+  skillsUsed?: string[];
 }
 
 export interface TimelineSpanRange {

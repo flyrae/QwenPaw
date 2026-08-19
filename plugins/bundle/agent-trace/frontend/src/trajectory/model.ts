@@ -56,6 +56,20 @@ function parseInputNew(value: unknown): TrajectoryRecord["inputNew"] {
   return entries.length > 0 ? entries : undefined;
 }
 
+/** Skill name from a builtin Skill-tool call input ({"skill": name}). */
+function parseSkillName(input: unknown): string | undefined {
+  if (typeof input !== "string" || !input) return undefined;
+  try {
+    const parsed = JSON.parse(input) as { skill?: unknown };
+    if (typeof parsed.skill === "string" && parsed.skill) {
+      return parsed.skill;
+    }
+  } catch {
+    /* not JSON — ignore */
+  }
+  return undefined;
+}
+
 function firstLine(text: string | undefined, max = 160): string {
   if (!text) return "";
   const line = text.split("\n", 1)[0].trim();
@@ -514,20 +528,23 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
       }
       case "tool/call": {
         const callData = dataOf(event);
+        const toolName = String(callData.name ?? "?");
+        const skillName =
+          toolName === "Skill" ? parseSkillName(callData.input) : undefined;
         const cell: TrajectoryRecord = {
           index: ++index,
           runIndex: 0,
           runId: event.run_id,
           kind: "tool",
-          text: `${String(callData.name ?? "?")}(${firstLine(
-            String(callData.input ?? ""),
-            60,
-          )})`,
+          text: skillName
+            ? `📚 ${skillName}`
+            : `${toolName}(${firstLine(String(callData.input ?? ""), 60)})`,
           timeSeconds: null,
           startedAt: epochMs(event.t),
           isError: false,
           running: true,
-          toolName: String(callData.name ?? "?"),
+          toolName,
+          skillName,
           toolInput: callData.input ? String(callData.input) : undefined,
         };
         appendCell(event.run_id, cell);
@@ -576,7 +593,11 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         };
         if (pending) {
           Object.assign(pending.cell, fill);
-          pending.cell.text = `${pending.cell.text}${outputPreview}`;
+          // Skill-load rows keep their clean "📚 name" label — the
+          // loaded SKILL.md body preview is noise on the row.
+          if (!pending.cell.skillName) {
+            pending.cell.text = `${pending.cell.text}${outputPreview}`;
+          }
           pending.cell.raw = [
             ...(pending.call
               ? [pending.call as unknown as Record<string, unknown>]
@@ -607,6 +628,19 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
       for (const cell of list) cellsOf(turn).push(cell);
       orphanCells.delete(runId);
     }
+  }
+
+  // Collect the skills loaded within each request (for the pill badge).
+  for (const turn of turns) {
+    const names: string[] = [];
+    for (const group of turn.groups) {
+      for (const cell of group.cells) {
+        if (cell.skillName && !names.includes(cell.skillName)) {
+          names.push(cell.skillName);
+        }
+      }
+    }
+    if (names.length > 0) turn.skillsUsed = names;
   }
 
   return turns;
