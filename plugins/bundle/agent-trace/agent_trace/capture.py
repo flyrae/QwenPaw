@@ -968,9 +968,11 @@ def _llm_call_payload(
     the whole context on every call. A changed prefix (compaction /
     rewrite) re-records the full input once with ``context_reset``.
     """
-    start, reset = service.llm_input_delta(
+    roles = [_msg_parts(msg)[0] for msg in messages]
+    start, reset, tail_update = service.llm_input_delta(
         session_id,
         _message_fingerprints(messages),
+        roles,
     )
     payload = {
         "model": model_hint,
@@ -988,6 +990,8 @@ def _llm_call_payload(
     }
     if reset:
         payload["context_reset"] = True
+    if tail_update:
+        payload["tail_update"] = True
     return payload
 
 

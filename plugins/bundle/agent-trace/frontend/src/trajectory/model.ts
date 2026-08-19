@@ -560,21 +560,27 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           }
         }
         if (currentInputNew) {
-          accumulatedInput =
-            callData.context_reset === true
-              ? currentInputNew.map((message) => ({
-                  role: message.role,
-                  chars: message.chars,
-                  text: message.text,
-                }))
-              : [
-                  ...accumulatedInput,
-                  ...currentInputNew.map((message) => ({
-                    role: message.role,
-                    chars: message.chars,
-                    text: message.text,
-                  })),
-                ];
+          const asDiff = currentInputNew.map((message) => ({
+            role: message.role,
+            chars: message.chars,
+            text: message.text,
+          }));
+          if (callData.context_reset === true) {
+            accumulatedInput = asDiff;
+          } else if (callData.tail_update === true) {
+            // Same-position replacement of the trailing message.
+            accumulatedInput = [...accumulatedInput.slice(0, -1), ...asDiff];
+          } else if (
+            typeof callData.messages_count === "number" &&
+            currentInputNew.length >= callData.messages_count &&
+            accumulatedInput.length > 0
+          ) {
+            // Full input without a reset flag: the fingerprint cache
+            // was lost (plugin hot reload) — resync, don't append.
+            accumulatedInput = asDiff;
+          } else {
+            accumulatedInput = [...accumulatedInput, ...asDiff];
+          }
         }
         prevCallDigest = Array.isArray(callData.messages)
           ? (callData.messages as MessageDigest[]).map((message) => ({

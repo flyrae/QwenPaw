@@ -515,6 +515,54 @@ class TestModelCall:
         assert new_entries[1]["chars"] == len("tool says 42")
         assert "context_reset" not in calls[1]["data"]
 
+    async def test_tail_update_records_replacement_only(
+        self,
+        service,
+        hook_ctx,
+    ):
+        await AgentTraceRunStartHook().run(hook_ctx)
+        base = [
+            text_msg("system", "sys"),
+            text_msg("user", "q"),
+            text_msg("assistant", "answer v1"),
+        ]
+        grown = [
+            text_msg("system", "sys"),
+            text_msg("user", "q"),
+            text_msg("assistant", "answer v1 continued"),
+        ]
+
+        async def next_handler(**kwargs):
+            return SimpleNamespace(text="a")
+
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={"messages": base},
+            next_handler=next_handler,
+        )
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={"messages": grown},
+            next_handler=next_handler,
+        )
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        calls = [e for e in events if e["type"] == "llm/call"]
+        first = calls[0]["data"]
+        second = calls[1]["data"]
+        assert [m["text"] for m in first["messages_new"]] == [
+            "sys",
+            "q",
+            "answer v1",
+        ]
+        assert "context_reset" not in first
+        # Tail replacement: only the updated message, no reset storm.
+        assert [m["text"] for m in second["messages_new"]] == [
+            "answer v1 continued",
+        ]
+        assert second["tail_update"] is True
+        assert "context_reset" not in second
+
     async def test_messages_new_context_reset_on_prefix_change(
         self,
         service,

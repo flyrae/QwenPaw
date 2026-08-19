@@ -1108,9 +1108,12 @@ export function Inspector({
                               style={{ fontSize: 11, minWidth: 0 }}
                               ellipsis={true}
                             >
-                              {`${(change.oldText ?? "").slice(0, 40)} → ${(
-                                change.newText ?? ""
-                              ).slice(0, 40)}`}
+                              {`${t(locale, "resetOldPrefix")}${(
+                                change.oldText ?? ""
+                              ).slice(0, 40)} → ${t(
+                                locale,
+                                "resetNewPrefix",
+                              )}${(change.newText ?? "").slice(0, 40)}`}
                             </Text>
                           ) : (
                             <Text
@@ -1118,10 +1121,14 @@ export function Inspector({
                               style={{ fontSize: 11, minWidth: 0 }}
                               ellipsis={true}
                             >
-                              {(change.oldText ?? change.newText ?? "").slice(
+                              {`${
+                                change.status === "removed"
+                                  ? t(locale, "resetOldPrefix")
+                                  : t(locale, "resetNewPrefix")
+                              }${(change.oldText ?? change.newText ?? "").slice(
                                 0,
                                 60,
-                              )}
+                              )}`}
                             </Text>
                           )}
                         </div>
