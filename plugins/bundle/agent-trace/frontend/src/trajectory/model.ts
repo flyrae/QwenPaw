@@ -38,6 +38,24 @@ function isCharsRecord(value: unknown): value is Record<string, number> {
   );
 }
 
+/** Parse llm/call messages_new into typed entries. */
+function parseInputNew(value: unknown): TrajectoryRecord["inputNew"] {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const entries = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const item = raw as Record<string, unknown>;
+    entries.push({
+      role: typeof item.role === "string" ? item.role : "?",
+      chars: typeof item.chars === "number" ? item.chars : 0,
+      text: typeof item.text === "string" ? item.text : undefined,
+      toolCallId:
+        typeof item.tool_call_id === "string" ? item.tool_call_id : undefined,
+    });
+  }
+  return entries.length > 0 ? entries : undefined;
+}
+
 function firstLine(text: string | undefined, max = 160): string {
   if (!text) return "";
   const line = text.split("\n", 1)[0].trim();
@@ -429,6 +447,8 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
               ? callData.provider
               : undefined,
           messagesMeta,
+          inputNew: parseInputNew(callData.messages_new),
+          contextReset: callData.context_reset === true,
           options,
         };
         appendCell(event.run_id, cell);

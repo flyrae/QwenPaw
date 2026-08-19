@@ -86,6 +86,18 @@ export interface MessagesMeta {
 }
 
 /**
+ * One message appended since the previous model call (from llm/call
+ * messages_new) — after a tool round this is how the tool results
+ * enter the model input. Content is truncated + redacted at capture.
+ */
+export interface InputNewMessage {
+  role: string;
+  chars: number;
+  text?: string;
+  toolCallId?: string;
+}
+
+/**
  * Rough chars→token estimate. Content is not stored, so the ratio is
  * picked from the model family (UI labels these values "estimated").
  */
@@ -122,6 +134,10 @@ export interface TrajectoryRecord {
   provider?: string;
   /* size-only input accounting (from llm/call messages_meta) */
   messagesMeta?: MessagesMeta;
+  /* messages appended since the previous call (llm/call messages_new) */
+  inputNew?: InputNewMessage[];
+  /* context prefix changed before this call (compaction / rewrite) */
+  contextReset?: boolean;
   outputText?: string;
   thinkingText?: string;
   usage?: UsageInfo;

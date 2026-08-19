@@ -991,6 +991,48 @@ export function Inspector({
     selected.marker ||
     (selected.toolCalls && selected.toolCalls.length > 0)
   ) {
+    if (selected.inputNew && selected.inputNew.length > 0) {
+      items.push({
+        key: "input",
+        label: t(locale, "inputTab"),
+        children: (
+          <div style={{ display: "grid", gap: 8 }}>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {t(locale, "inputNewNote")}
+            </Text>
+            {selected.contextReset ? (
+              <Text type="warning" style={{ fontSize: 12 }}>
+                {t(locale, "contextReset")}
+              </Text>
+            ) : null}
+            {selected.messagesMeta ? (
+              <KeyValue
+                label={t(locale, "inputTotal")}
+                value={`${selected.messagesMeta.count} · ${formatTokens(
+                  selected.messagesMeta.totalChars,
+                )} ${t(locale, "charUnit")}`}
+              />
+            ) : null}
+            {selected.inputNew.map((message, index) => (
+              <div key={index}>
+                <div
+                  style={{ display: "flex", gap: 8, alignItems: "baseline" }}
+                >
+                  <Text code style={{ fontSize: 11, flexShrink: 0 }}>
+                    {message.role}
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: 11 }}>
+                    {formatTokens(message.chars)} {t(locale, "charUnit")}
+                    {message.toolCallId ? ` · ${message.toolCallId}` : ""}
+                  </Text>
+                </div>
+                {message.text ? <Pre value={message.text} /> : null}
+              </div>
+            ))}
+          </div>
+        ),
+      });
+    }
     items.push({
       key: "raw",
       label: t(locale, "output"),

@@ -330,21 +330,60 @@ def _options_digest(input_kwargs: dict) -> dict:
     return options
 
 
+def _msg_parts(msg: Any) -> "tuple[str, Any, str]":
+    """Extract ``(role, content, tool_call_id)`` from a dict or object."""
+    if isinstance(msg, dict):
+        role = str(msg.get("role") or "")
+        content = msg.get("content")
+        call_id = msg.get("tool_call_id")
+    else:
+        role = str(getattr(msg, "role", "") or "")
+        content = getattr(msg, "content", None)
+        call_id = getattr(msg, "tool_call_id", None)
+    return role, content, str(call_id) if call_id else ""
+
+
+def _message_fingerprints(messages: Any) -> list:
+    """Stable per-message fingerprints for prefix comparison."""
+    fingerprints = []
+    for msg in messages or []:
+        role, content, _ = _msg_parts(msg)
+        text = _block_texts(content)
+        fingerprints.append(f"{role}|{len(text)}|{text[:64]}")
+    return fingerprints
+
+
 def _messages_digest(messages: Any) -> list:
     """Compact role+text digest of the input messages of a model call."""
     digest = []
     for msg in messages or []:
-        if isinstance(msg, dict):
-            role = str(msg.get("role") or "")
-            content = msg.get("content")
-        else:
-            role = str(getattr(msg, "role", "") or "")
-            content = getattr(msg, "content", None)
+        role, content, _ = _msg_parts(msg)
         text = _block_texts(content)
         if len(text) > _DIGEST_TEXT_CHARS:
             text = text[:_DIGEST_TEXT_CHARS] + "…"
         digest.append({"role": role, "text": text})
     return digest
+
+
+def _new_input_messages(messages: Any, start: int, limit: int) -> list:
+    """Content view of the messages appended since the previous call.
+
+    After a tool round this is exactly how the tool results enter the
+    model input (assistant tool-call echo + role=tool messages), so the
+    feed path stays observable. Content is truncated at ``limit`` and
+    the usual store-side redaction still applies.
+    """
+    entries = []
+    for msg in list(messages or [])[start:]:
+        role, content, call_id = _msg_parts(msg)
+        text = _block_texts(content)
+        entry: dict = {"role": role, "chars": len(text)}
+        if call_id:
+            entry["tool_call_id"] = call_id
+        if text:
+            entry["text"] = text[:limit]
+        entries.append(entry)
+    return entries
 
 
 def _messages_meta(messages: Any) -> dict:
@@ -362,12 +401,9 @@ def _messages_meta(messages: Any) -> dict:
     total = 0
     number = 0
     for msg in messages or []:
-        if isinstance(msg, dict):
-            role = str(msg.get("role") or "other")
-            content = msg.get("content")
-        else:
-            role = str(getattr(msg, "role", "") or "other")
-            content = getattr(msg, "content", None)
+        role, content, _ = _msg_parts(msg)
+        if not role:
+            role = "other"
         length = len(_block_texts(content))
         number += 1
         counts[role] = counts.get(role, 0) + 1
@@ -872,21 +908,69 @@ class AgentTraceFinalizeHook(HookBase):
 
 
 def _llm_call_payload(
+    service: Any,
+    session_id: str,
     model_hint: str,
     provider_hint: Optional[str],
     messages: list,
     input_kwargs: dict,
 ) -> dict:
-    """Payload of one llm/call event (model, digests, size meta, options)."""
-    return {
+    """Payload of one llm/call event.
+
+    ``messages_new`` lists the messages appended since this session's
+    previous model call (with content, truncated + redacted), so how
+    tool results feed the next call stays observable without re-storing
+    the whole context on every call. A changed prefix (compaction /
+    rewrite) re-records the full input once with ``context_reset``.
+    """
+    start, reset = service.llm_input_delta(
+        session_id,
+        _message_fingerprints(messages),
+    )
+    payload = {
         "model": model_hint,
         **({"provider": provider_hint} if provider_hint else {}),
         "messages_count": len(messages),
         "last_user_text": _last_user_text(messages),
         "messages": _messages_digest(messages),
         "messages_meta": _messages_meta(messages),
+        "messages_new": _new_input_messages(
+            messages,
+            start,
+            service.config.max_payload_chars,
+        ),
         "options": _options_digest(input_kwargs),
     }
+    if reset:
+        payload["context_reset"] = True
+    return payload
+
+
+def _emit_llm_call(run: Any, service: Any, agent: Any, input_kwargs: dict):
+    """Record the header (on change) + one llm/call event; return the
+    model name hint for the result event."""
+    messages = list(input_kwargs.get("messages") or [])
+    _maybe_record_header(
+        run,
+        service,
+        messages,
+        input_kwargs.get("tools"),
+    )
+    model_hint = _model_name(agent, input_kwargs)
+    provider_hint = _provider_name(agent, input_kwargs)
+    _safe_append(
+        run,
+        ev.EVENT_LLM_CALL,
+        _llm_call_payload(
+            service,
+            run.session_id,
+            model_hint,
+            provider_hint,
+            messages,
+            input_kwargs,
+        ),
+    )
+    return model_hint
 
 
 class TraceMiddleware(MiddlewareBase):
@@ -907,25 +991,7 @@ class TraceMiddleware(MiddlewareBase):
             or not service.config.capture_llm
         ):
             return await next_handler(**input_kwargs)
-        messages = list(input_kwargs.get("messages") or [])
-        _maybe_record_header(
-            run,
-            service,
-            messages,
-            input_kwargs.get("tools"),
-        )
-        model_hint = _model_name(agent, input_kwargs)
-        provider_hint = _provider_name(agent, input_kwargs)
-        _safe_append(
-            run,
-            ev.EVENT_LLM_CALL,
-            _llm_call_payload(
-                model_hint,
-                provider_hint,
-                messages,
-                input_kwargs,
-            ),
-        )
+        model_hint = _emit_llm_call(run, service, agent, input_kwargs)
         start = time.perf_counter()
 
         def _record_result(

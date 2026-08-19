@@ -460,6 +460,118 @@ class TestModelCall:
         ][0]
         assert len(digest_user["text"]) < 5_000
 
+    async def test_messages_new_records_only_appended(
+        self,
+        service,
+        hook_ctx,
+    ):
+        await AgentTraceRunStartHook().run(hook_ctx)
+
+        async def next_handler(**kwargs):
+            return SimpleNamespace(text="a")
+
+        first = [
+            text_msg("system", "sys"),
+            text_msg("user", "hello"),
+        ]
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={"messages": first},
+            next_handler=next_handler,
+        )
+        # Tool round: assistant echo + tool result appended.
+        second = first + [
+            {
+                "role": "assistant",
+                "content": "calling the tool",
+                "tool_calls": [],
+            },
+            {
+                "role": "tool",
+                "content": "tool says 42",
+                "tool_call_id": "tc-9",
+            },
+        ]
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={"messages": second},
+            next_handler=next_handler,
+        )
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        calls = [e for e in events if e["type"] == "llm/call"]
+        # First call: everything is new (no context_reset marker).
+        assert [m["role"] for m in calls[0]["data"]["messages_new"]] == [
+            "system",
+            "user",
+        ]
+        assert "context_reset" not in calls[0]["data"]
+        # Second call: only the appended messages, tool_call_id kept.
+        new_entries = calls[1]["data"]["messages_new"]
+        assert [m["role"] for m in new_entries] == ["assistant", "tool"]
+        assert new_entries[1]["tool_call_id"] == "tc-9"
+        assert new_entries[1]["text"] == "tool says 42"
+        assert new_entries[1]["chars"] == len("tool says 42")
+        assert "context_reset" not in calls[1]["data"]
+
+    async def test_messages_new_context_reset_on_prefix_change(
+        self,
+        service,
+        hook_ctx,
+    ):
+        await AgentTraceRunStartHook().run(hook_ctx)
+
+        async def next_handler(**kwargs):
+            return SimpleNamespace(text="a")
+
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={"messages": [text_msg("user", "q1")]},
+            next_handler=next_handler,
+        )
+        # Prefix changed (compaction rewrote history).
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={
+                "messages": [
+                    text_msg("system", "compacted"),
+                    text_msg("user", "q1"),
+                ],
+            },
+            next_handler=next_handler,
+        )
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        calls = [e for e in events if e["type"] == "llm/call"]
+        assert calls[1]["data"]["context_reset"] is True
+        assert [m["role"] for m in calls[1]["data"]["messages_new"]] == [
+            "system",
+            "user",
+        ]
+
+    async def test_messages_new_truncated_to_payload_limit(
+        self,
+        service,
+        hook_ctx,
+    ):
+        await AgentTraceRunStartHook().run(hook_ctx)
+        big = "y" * 10_000
+
+        async def next_handler(**kwargs):
+            return SimpleNamespace(text="a")
+
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={"messages": [text_msg("tool", big)]},
+            next_handler=next_handler,
+        )
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        call = [e for e in events if e["type"] == "llm/call"][0]
+        entry = call["data"]["messages_new"][0]
+        assert entry["chars"] == 10_000
+        assert len(entry["text"]) <= service.config.max_payload_chars
+
     async def test_streaming_records_assembled_output(
         self,
         service,

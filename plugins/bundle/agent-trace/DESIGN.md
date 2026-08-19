@@ -39,7 +39,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | `message/inbound` | PRE_EXECUTE(15)，run 开启后 | 类型化 content parts（text/image/video/file）+ channel_meta 摘要 |
 | `run/start` | PRE_EXECUTE(14) | query、输入消息摘要、trigger、channel；子代理运行附 `root_session_id`/`root_agent_id` |
 | `llm/header` | 首次及每次变更 | sha256 内容哈希、`prev_sha256` 链、系统提示词全文（独立 200k 上限）、工具名列表 + **完整 schema** |
-| `llm/call` | 每次模型调用 | model、messages 摘要（每条截 200 字符）、**messages_meta 尺寸记账**（按 role 聚合的字符/条数 + 最大工具消息，只记数字不存内容，v0.3.1）、**options 参数摘要**（temperature/top_p/max_tokens/stream…） |
+| `llm/call` | 每次模型调用 | model、messages 摘要（每条截 200 字符）、**messages_meta 尺寸记账**（按 role 聚合的字符/条数 + 最大工具消息，只记数字不存内容，v0.3.1）、**messages_new 增量输入**（相对上次调用新增的消息内容，截断+脱敏——工具轮后即"工具结果如何进入模型输入"的通路；前缀变化时 context_reset 全量重记，v0.3.2）、**options 参数摘要**（temperature/top_p/max_tokens/stream…） |
 | `llm/result` | 调用结束 | 输出全文、thinking、模型发出的 tool_calls、usage（含 cache read/write）、`timing`（TTFT/解码时长，流式）、错误 |
 | `tool/call` | on_acting 进入 | 工具名、原始入参、tool_call_id |
 | `tool/result` | 完成/异常/GeneratorExit | 输出、耗时、错误、note（提前关闭标注）、**output_chars/output_bytes（截断前完整大小，v0.3.1）** |
@@ -136,6 +136,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | （本次） | 台账可读性：入站报文**合并进 USER 行**（来源渠道/用户/多媒体部件，旧数据降级为可读独立行），出站报文改为一行**回执**（渠道 + 字数，不再重复回复正文） |
 | （本次） | 标记行细分：审批（🛡盾牌/volcano）、回执（📤发送/cyan）、子代理（🚀火箭/geekblue）、提示词（📄文档/green）、错误（⭕红）各有专属标签与图标，不再共用"标记"；Inspector Kind 字段同步 |
 | （v0.3.1） | **输入/信息量归因**：`llm/call.messages_meta` 按 role 聚合字符记账（不存内容，固定大小）；`tool/result.output_chars/output_bytes` 记录截断前完整大小；请求检查器 Usage 页新增**输入构成四桶**（system/user/assistant/tool，字符→token 按模型系数估算并标注）、**最大单条工具消息**、**跨轮输入增量对账**（input[n]−input[n−1]，配合缓存命中显示增量被吸收情况）；工具记录 Summary 显示截断前输出大小；91 测试 |
+| （v0.3.2） | **增量输入可观测**：`messages_new` 记录每次调用相对上次新增的输入消息（内容截断+脱敏、带 tool_call_id），指纹公共前缀对比、前缀变化（压缩/重写）触发 `context_reset` 全量重记；助手记录检查器新增**「输入」页**（新增消息列表 + 输入总量 + reset 警告）——回答"工具输出怎么进入模型"；94 测试 |
 
 ## 11. 后续路线（未做，按价值排序）
 
