@@ -442,6 +442,11 @@ class TraceStore:
             stats["last_event_t"] = event.get("t")
             if event_type == EVENT_RUN_START:
                 stats["runs"] += 1
+                slash_skill = _slash_skill_name(data)
+                if slash_skill:
+                    stats["skills"][slash_skill] = (
+                        stats["skills"].get(slash_skill, 0) + 1
+                    )
             elif event_type == EVENT_RUN_END:
                 if data.get("status") == "error":
                     stats["errors"] += 1
@@ -580,6 +585,11 @@ class TraceStore:
                         runs += 1
                         if run_id:
                             open_runs.add(run_id)
+                        slash_skill = _slash_skill_name(data)
+                        if slash_skill:
+                            skills[slash_skill] = (
+                                skills.get(slash_skill, 0) + 1
+                            )
                     elif event_type == EVENT_RUN_END:
                         if run_id:
                             open_runs.discard(run_id)
@@ -744,6 +754,32 @@ def _skill_load_name(data: Any) -> Optional[str]:
         if isinstance(parsed, dict):
             name = parsed.get("skill")
             return name if isinstance(name, str) and name else None
+    return None
+
+
+_SLASH_SKILL_RE = re.compile(r"<skill>\s*<name>([^<]+)</name>")
+
+
+def _slash_skill_name(data: Any) -> Optional[str]:
+    """Skill inlined into a ``run/start`` payload by a slash command
+    (the whole ``<skill>`` block is embedded into the query)."""
+    if not isinstance(data, dict):
+        return None
+    texts: List[str] = []
+    query = data.get("query")
+    if isinstance(query, str):
+        texts.append(query)
+    messages = data.get("messages")
+    if isinstance(messages, list) and messages:
+        first = messages[0]
+        if isinstance(first, dict):
+            text = first.get("text")
+            if isinstance(text, str):
+                texts.append(text)
+    for text in texts:
+        match = _SLASH_SKILL_RE.search(text)
+        if match:
+            return match.group(1).strip()
     return None
 
 

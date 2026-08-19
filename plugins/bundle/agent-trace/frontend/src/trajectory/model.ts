@@ -91,6 +91,12 @@ function extractSkillDirs(prompt: string): Array<[string, string]> {
   return pairs;
 }
 
+/** Skill name inlined into a slash-command query ("<skill><name>x</name>"). */
+function matchSlashSkill(text: string): string | null {
+  const match = text.match(/<skill>\s*<name>([^<]+)<\/name>/);
+  return match ? match[1].trim() : null;
+}
+
 function firstLine(text: string | undefined, max = 160): string {
   if (!text) return "";
   const line = text.split("\n", 1)[0].trim();
@@ -205,6 +211,14 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           ? (data.messages as MessageDigest[])
           : [];
         const query = String(data.query ?? "");
+        // Slash-command skill invocation inlines the whole <skill> block
+        // into the query (a third disclosure path, next to the Skill
+        // tool and raw file access).
+        let slashSkill = matchSlashSkill(query);
+        if (!slashSkill && messages.length > 0) {
+          slashSkill = matchSlashSkill(String(messages[0]?.text ?? ""));
+        }
+        if (slashSkill) loadedSkills.add(slashSkill);
         const userCell: TrajectoryRecord = {
           index: ++index,
           runIndex: runNumber,
@@ -216,6 +230,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           startedAt: epochMs(event.t),
           isError: false,
           running: false,
+          skillName: slashSkill ?? undefined,
           model: undefined,
         };
         userCellByRun.set(event.run_id, userCell);

@@ -100,14 +100,40 @@ class TestSessions:
             "r1",
             {"name": "execute_shell_command", "input": '{"cmd":"dir"}'},
         )
+        # Slash-command invocation inlines the skill block into the query.
+        service.store.append(
+            "sess-1",
+            "run/start",
+            "r2",
+            {
+                "query": (
+                    "/xlsx 查看这个excel\n\n<skill>\n<name>xlsx</name>\n"
+                    "<description>Sheets.</description>\n</skill>\n"
+                ),
+            },
+        )
+        service.store.append(
+            "sess-1",
+            "run/end",
+            "r2",
+            {"status": "success"},
+        )
         await service.store.flush()
 
         response = await client.get("/agent-trace/sessions")
         summary = response.json()["sessions"][0]
-        assert summary["skills"] == {"browser-zh": 2, "pdf": 1}
+        assert summary["skills"] == {
+            "browser-zh": 2,
+            "pdf": 1,
+            "xlsx": 1,
+        }
 
         response = await client.get("/agent-trace/sessions/sess-1/stats")
-        assert response.json()["skills"] == {"browser-zh": 2, "pdf": 1}
+        assert response.json()["skills"] == {
+            "browser-zh": 2,
+            "pdf": 1,
+            "xlsx": 1,
+        }
 
     async def test_list_pagination(self, client, service):
         for index in range(3):

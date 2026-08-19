@@ -211,7 +211,7 @@ function RecordRow({
       </span>
       <Tag
         color={
-          record.skillName
+          record.kind === "tool" && record.skillName
             ? "geekblue"
             : (record.markerKind && MARKER_META[record.markerKind]?.color) ||
               KIND_COLORS[record.kind] ||
@@ -228,7 +228,7 @@ function RecordRow({
           flexShrink: 0,
         }}
       >
-        {record.skillName
+        {record.kind === "tool" && record.skillName
           ? t(storedLocale(), "skillLoadKind")
           : recordKindLabel(record, storedLocale())}
       </Tag>
@@ -273,6 +273,24 @@ function RecordRow({
           ⚡{record.inSkill}
         </Tag>
       ) : null}
+      {record.kind === "user" && record.skillName ? (
+        <Tag
+          color="geekblue"
+          title={record.skillName}
+          style={{
+            marginInlineEnd: 0,
+            fontSize: 10,
+            lineHeight: "16px",
+            flexShrink: 0,
+            maxWidth: 160,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          /{record.skillName}
+        </Tag>
+      ) : null}
       <span
         style={{
           flex: 1,
@@ -287,7 +305,7 @@ function RecordRow({
           <Text type="secondary" style={{ fontSize: 12 }}>
             {receiptLabel(record, storedLocale())}
           </Text>
-        ) : record.skillName ? (
+        ) : record.kind === "tool" && record.skillName ? (
           <>
             <Text strong style={{ fontSize: 12 }}>
               {record.skillName}
