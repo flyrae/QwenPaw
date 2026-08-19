@@ -2814,7 +2814,7 @@ function vl(e) {
     const u = gt(p);
     switch (p.type) {
       case "run/start": {
-        M += 1, m.set(
+        M += 1, k.length = 0, m.set(
           p.run_id,
           typeof u.channel == "string" ? u.channel : ""
         );
@@ -2829,7 +2829,7 @@ function vl(e) {
           O.runIndex = M, N(g).push(O);
         const S = Array.isArray(u.messages) ? u.messages : [], x = String(u.query ?? "");
         let z = Qt(x);
-        !z && S.length > 0 && (z = Qt(String(((F = S[0]) == null ? void 0 : F.text) ?? ""))), z && (d.add(z), k.length = 0, k.push([z, "slash"]));
+        !z && S.length > 0 && (z = Qt(String(((F = S[0]) == null ? void 0 : F.text) ?? ""))), z && (d.add(z), k.push([z, "slash"]));
         const W = {
           index: ++b,
           runIndex: M,

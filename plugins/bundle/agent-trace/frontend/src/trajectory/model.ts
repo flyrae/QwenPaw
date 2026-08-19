@@ -193,6 +193,9 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
     switch (event.type) {
       case "run/start": {
         runNumber += 1;
+        // Defensive reset: a crashed run without run/end must not leak
+        // its active skills into this run's temporal attribution.
+        activeRunSkills.length = 0;
         channelByRun.set(
           event.run_id,
           typeof data.channel === "string" ? data.channel : "",
@@ -224,7 +227,6 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         }
         if (slashSkill) {
           loadedSkills.add(slashSkill);
-          activeRunSkills.length = 0;
           activeRunSkills.push([slashSkill, "slash"]);
         }
         const userCell: TrajectoryRecord = {
