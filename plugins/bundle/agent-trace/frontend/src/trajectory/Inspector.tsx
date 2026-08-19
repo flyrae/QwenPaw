@@ -895,6 +895,16 @@ export function Inspector({
         {selected.toolName ? (
           <KeyValue label="Tool" value={selected.toolName} />
         ) : null}
+        {selected.inSkill ? (
+          <KeyValue
+            label={t(locale, "skillResource")}
+            value={
+              selected.inSkillLoaded
+                ? `⚡ ${selected.inSkill}`
+                : `⚡ ${selected.inSkill}（${t(locale, "skillBypass")}）`
+            }
+          />
+        ) : null}
         {selected.toolOutputChars ? (
           <KeyValue
             label={t(locale, "outputSize")}

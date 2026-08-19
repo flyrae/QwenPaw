@@ -136,6 +136,8 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | （本次） | 台账可读性：入站报文**合并进 USER 行**（来源渠道/用户/多媒体部件，旧数据降级为可读独立行），出站报文改为一行**回执**（渠道 + 字数，不再重复回复正文） |
 | （本次） | 标记行细分：审批（🛡盾牌/volcano）、回执（📤发送/cyan）、子代理（🚀火箭/geekblue）、提示词（📄文档/green）、错误（⭕红）各有专属标签与图标，不再共用"标记"；Inspector Kind 字段同步 |
 | （v0.3.1） | **输入/信息量归因**：`llm/call.messages_meta` 按 role 聚合字符记账（不存内容，固定大小）；`tool/result.output_chars/output_bytes` 记录截断前完整大小；请求检查器 Usage 页新增**输入构成四桶**（system/user/assistant/tool，字符→token 按模型系数估算并标注）、**最大单条工具消息**、**跨轮输入增量对账**（input[n]−input[n−1]，配合缓存命中显示增量被吸收情况）；工具记录 Summary 显示截断前输出大小；91 测试 |
+| （v0.3.3） | **技能观测**：`Skill` 工具调用聚合为 `skills {name: count}`（列表/stats 端点）；台账技能行（geekblue 📚 + 已加载大小，不再显示 JSON 原文与正文预览）、请求 pill 📚 角标、会话列表/统计条技能段；95 测试 |
+| （v0.3.4） | **第 3 层技能资源归因**：从 header `<agent-skills>` 提取技能目录映射（跨 run 持久），工具调用输入含技能目录路径即标 `⚡技能名`——**已加载后使用（geekblue）vs 未加载直接使用（orange 旁路）**按事件序判定；统计条汇总 `⚡ 未加载即执行`；纯前端零采集改动 |
 | （v0.3.2） | **增量输入可观测**：`messages_new` 记录每次调用相对上次新增的输入消息（内容截断+脱敏、带 tool_call_id），指纹公共前缀对比、前缀变化（压缩/重写）触发 `context_reset` 全量重记；助手记录检查器新增**「输入」页**（新增消息列表 + 输入总量 + reset 警告）——回答"工具输出怎么进入模型"；94 测试 |
 
 ## 11. 后续路线（未做，按价值排序）

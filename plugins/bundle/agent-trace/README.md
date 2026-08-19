@@ -80,6 +80,17 @@ session on the left; the right side is the trajectory view:
 
 The recording switches live in the page's settings popover.
 
+### Skill observability
+
+Skills are prompt-level progressive disclosure, so the viewer marks the
+two observable layers: `Skill` tool loads render as geekblue rows
+(📚 name + loaded size) with per-request / per-session usage badges, and
+tool calls that touch a skill's resources (the skill dir path appears
+in the command — `cd {skill_dir} && python scripts/...`) carry a ⚡ tag:
+geekblue when that skill was loaded first, **orange when it was used
+without loading the instructions** (bypass) — the session stats strip
+summarizes bypassed skills as `⚡ 未加载即执行: name`.
+
 ### Chat-header quick jump
 
 A 🧭 button in the chat header jumps straight to the trace page with

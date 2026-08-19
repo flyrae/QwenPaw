@@ -251,6 +251,28 @@ function RecordRow({
           {record.model}
         </Tag>
       ) : null}
+      {record.inSkill ? (
+        <Tag
+          color={record.inSkillLoaded ? "geekblue" : "orange"}
+          title={
+            record.inSkillLoaded
+              ? record.inSkill
+              : `${record.inSkill} — ${t(storedLocale(), "skillBypass")}`
+          }
+          style={{
+            marginInlineEnd: 0,
+            fontSize: 10,
+            lineHeight: "16px",
+            flexShrink: 0,
+            maxWidth: 160,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          ⚡{record.inSkill}
+        </Tag>
+      ) : null}
       <span
         style={{
           flex: 1,

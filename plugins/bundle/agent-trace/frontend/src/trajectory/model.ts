@@ -70,6 +70,27 @@ function parseSkillName(input: unknown): string | undefined {
   return undefined;
 }
 
+/** Normalize a path for matching: one kind of separator, lowercase,
+ * collapses duplicate separators (JSON-escaped backslashes included). */
+function normalizeSkillPath(text: string): string {
+  return text.replace(/[/\\]+/g, "/").toLowerCase();
+}
+
+/** Extract [normalizedDir, name] pairs from an <agent-skills> section. */
+function extractSkillDirs(prompt: string): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  for (const block of prompt.matchAll(/<skill>([\s\S]*?)<\/skill>/g)) {
+    const name = block[1].match(/<name>([^<]+)<\/name>/);
+    const dir = block[1].match(/<dir>([^<]+)<\/dir>/);
+    if (name && dir && dir[1].trim()) {
+      pairs.push([normalizeSkillPath(dir[1].trim()), name[1].trim()]);
+    }
+  }
+  // Longest dir first so nested skill dirs match their own skill.
+  pairs.sort((a, b) => b[0].length - a[0].length);
+  return pairs;
+}
+
 function firstLine(text: string | undefined, max = 160): string {
   if (!text) return "";
   const line = text.split("\n", 1)[0].trim();
@@ -106,6 +127,12 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   // The USER record of each run — message/inbound merges into it.
   const userCellByRun = new Map<string, TrajectoryRecord>();
   const promptBySha = new Map<string, string>();
+  // Skill directories from the latest <agent-skills> prompt section
+  // ([normalizedDir, name], longest dir first) + the skills explicitly
+  // loaded so far in this session — together they attribute tool calls
+  // that touch skill resources (layer 3 of skill observability).
+  let skillDirs: Array<[string, string]> = [];
+  const loadedSkills = new Set<string>();
   let index = 0;
   let runNumber = 0;
 
@@ -411,6 +438,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           raw: [event as unknown as Record<string, unknown>],
         });
         if (sha) promptBySha.set(sha, prompt);
+        if (prompt) skillDirs = extractSkillDirs(prompt);
         break;
       }
       case "llm/call": {
@@ -531,6 +559,22 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         const toolName = String(callData.name ?? "?");
         const skillName =
           toolName === "Skill" ? parseSkillName(callData.input) : undefined;
+        if (skillName) loadedSkills.add(skillName);
+        const toolInputText = callData.input
+          ? String(callData.input)
+          : undefined;
+        // Layer 3: does this call touch a skill's resources (scripts,
+        // references — the skill dir path appears in the input)?
+        let inSkill: string | undefined;
+        if (!skillName && toolInputText && skillDirs.length > 0) {
+          const normalizedInput = normalizeSkillPath(toolInputText);
+          for (const [dir, name] of skillDirs) {
+            if (normalizedInput.includes(dir)) {
+              inSkill = name;
+              break;
+            }
+          }
+        }
         const cell: TrajectoryRecord = {
           index: ++index,
           runIndex: 0,
@@ -545,6 +589,8 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           running: true,
           toolName,
           skillName,
+          inSkill,
+          inSkillLoaded: inSkill ? loadedSkills.has(inSkill) : undefined,
           toolInput: callData.input ? String(callData.input) : undefined,
         };
         appendCell(event.run_id, cell);

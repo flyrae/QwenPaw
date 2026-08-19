@@ -524,8 +524,28 @@ export function SessionTraceView({
         .join(" · ");
       if (skillText) parts.push(`📚 ${skillText}`);
     }
+    // Layer 3: skills whose resources were touched without ever being
+    // loaded in this session (bypass of the disclosure flow).
+    if (initialHeader?.prompt) {
+      const executed = new Set<string>();
+      const loaded = new Set<string>();
+      for (const turn of turns) {
+        for (const group of turn.groups) {
+          for (const cell of group.cells) {
+            if (cell.skillName) loaded.add(cell.skillName);
+            else if (cell.inSkill) executed.add(cell.inSkill);
+          }
+        }
+      }
+      const bypass = [...executed].filter((name) => !loaded.has(name));
+      if (bypass.length > 0) {
+        parts.push(
+          `⚡ ${t(locale, "skillBypassStrip")}: ${bypass.join(" · ")}`,
+        );
+      }
+    }
     return parts.join(" | ");
-  }, [sessionStats, summary, locale]);
+  }, [sessionStats, summary, locale, turns, initialHeader]);
 
   const closeInspector = () => {
     setSelectedIndex(null);

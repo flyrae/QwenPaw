@@ -150,6 +150,10 @@ export interface TrajectoryRecord {
   toolOutput?: string;
   /* skill-load row (builtin Skill tool): the loaded skill's name */
   skillName?: string;
+  /* this tool call touched a skill's resources (dir path match) */
+  inSkill?: string;
+  /* whether that skill had been loaded (Skill tool) before this call */
+  inSkillLoaded?: boolean;
   /* pre-truncation output size (from tool/result) */
   toolOutputChars?: number;
   toolOutputBytes?: number;
