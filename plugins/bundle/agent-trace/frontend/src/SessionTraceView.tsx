@@ -372,6 +372,50 @@ export function SessionTraceView({
     const lastOptions = [...llmCells].reverse().find((cell) => cell.options)
       ?.options;
     const lastMessage = [...llmCells].reverse().find((cell) => cell.outputText);
+
+    // Input composition: aggregate the size-only messages_meta of this
+    // run's model calls into role buckets (chars only, no content).
+    let composition: RequestSummary["inputComposition"];
+    const metaCells = llmCells.filter((cell) => cell.messagesMeta);
+    if (metaCells.length > 0) {
+      const charsByRole: Record<string, number> = {};
+      let totalChars = 0;
+      let maxToolChars = 0;
+      for (const cell of metaCells) {
+        const meta = cell.messagesMeta!;
+        for (const [role, chars] of Object.entries(meta.charsByRole)) {
+          charsByRole[role] = (charsByRole[role] ?? 0) + chars;
+        }
+        totalChars += meta.totalChars;
+        maxToolChars = Math.max(maxToolChars, meta.maxToolChars);
+      }
+      composition = { charsByRole, totalChars, maxToolChars };
+    }
+
+    // Cross-round growth: this run's billed input vs the previous run's.
+    // input_tokens[n] - input_tokens[n-1] ≈ content added by the previous
+    // round (tool results + user message + reasoning).
+    const turnIndex = turns.findIndex((item) => item.turn === selectedTurn);
+    const prevTurn = turnIndex > 0 ? turns[turnIndex - 1] : null;
+    let prevInputTokens: number | null = null;
+    if (prevTurn) {
+      prevInputTokens = 0;
+      for (const group of prevTurn.groups) {
+        for (const cell of group.cells) {
+          if (cell.kind === "message" && cell.usage) {
+            prevInputTokens += cell.usage.input_tokens ?? 0;
+          }
+        }
+      }
+    }
+    const growth =
+      prevInputTokens === null && turnIndex !== 0
+        ? undefined
+        : {
+            prevInputTokens,
+            deltaTokens: inputTokens - (prevInputTokens ?? 0),
+          };
+
     return {
       turn: selectedTurn,
       status: turn.status,
@@ -387,6 +431,8 @@ export function SessionTraceView({
       cacheReadTokens,
       cacheWriteTokens,
       reasoningTokens,
+      inputComposition: composition,
+      growth,
       resultIndex: lastMessage?.index,
       ttftMs,
       decodeMs,

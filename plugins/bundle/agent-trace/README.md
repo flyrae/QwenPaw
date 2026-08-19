@@ -32,10 +32,10 @@ The first line is a session header; every following line is one event:
 | `run/end`     | status (`success` / `error` / `cancelled` / `interrupted`), duration, error text |
 | `agent/spawn` | sub-agent pointer written into the root session's trace (`child_session_id` / `child_agent_id` / `child_trace_id`) |
 | `llm/header`  | system-prompt snapshot — recorded once per content change (sha-keyed, `prev_sha256` link, full prompt + tools catalog + full tool schemas) |
-| `llm/call`    | model, message count, input message digest                       |
+| `llm/call`    | model, message count, input message digest, `messages_meta` size accounting (chars/counts aggregated per role — numbers only, no content) |
 | `llm/result`  | model, duration, output text, thinking, tool calls the model emitted, token usage (incl. cache read/write), `timing` (`ttft_ms` / `decode_ms`, streaming calls), error |
-| `tool/call`   | tool name, raw input, tool call id                               |
-| `tool/result` | ok, duration, output, error, tool call id                        |
+| `tool/call`   | tool name, raw input, tool call id                                |
+| `tool/result` | ok, duration, output, error, tool call id, `output_chars`/`output_bytes` (full size before truncation) |
 
 Events are written through an in-memory buffer flushed on a 200 ms
 coalescing window, so the agent loop never blocks on disk IO. Capture is
@@ -70,7 +70,13 @@ session on the left; the right side is the trajectory view:
   (Summary / contents / Timing (Started, Total, TTFT, Decoding,
   throughput) / Usage), a whole request (Summary / Usage / Timing), or a
   request header (Summary / line-level Diff against the previous
-  version with context collapsing / full Prompt / Tools catalog).
+  version with context collapsing / full Prompt / Tools catalog). The
+  request Usage tab also decomposes the input into role buckets
+  (system / user / assistant / tool) from size-only capture with
+  per-model chars→tokens estimates, tracks the largest single tool
+  message, and reconciles billed-input growth against the previous
+  round (with the cache-absorbed share); tool records show their
+  pre-truncation output size.
 
 The recording switches live in the page's settings popover.
 

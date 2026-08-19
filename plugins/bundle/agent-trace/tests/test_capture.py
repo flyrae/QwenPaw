@@ -47,9 +47,7 @@ class TestMessageHooks:
         await AgentTraceInboundHook().run(hook_ctx)
         await AgentTraceFinalizeHook().run(hook_ctx)
         events = await drained_events(service, "sess-1")
-        inbound = [
-            e for e in events if e["type"] == "message/inbound"
-        ]
+        inbound = [e for e in events if e["type"] == "message/inbound"]
         assert len(inbound) == 1
         data = inbound[0]["data"]
         assert data["parts"][0] == {
@@ -96,9 +94,7 @@ class TestMessageHooks:
         await AgentTraceReplyHook().run(hook_ctx)
         await AgentTraceFinalizeHook().run(hook_ctx)
         events = await drained_events(service, "sess-1")
-        outbound = [
-            e for e in events if e["type"] == "message/outbound"
-        ]
+        outbound = [e for e in events if e["type"] == "message/outbound"]
         assert len(outbound) == 1
         assert outbound[0]["data"]["text"] == "final answer"
 
@@ -116,9 +112,7 @@ class TestMessageHooks:
         await AgentTraceReplyHook().run(hook_ctx)
         await AgentTraceFinalizeHook().run(hook_ctx)
         events = await drained_events(service, "sess-1")
-        assert not [
-            e for e in events if e["type"] == "message/outbound"
-        ]
+        assert not [e for e in events if e["type"] == "message/outbound"]
 
 
 class TestRunHooks:
@@ -221,9 +215,7 @@ class TestRunHooks:
         await AgentTraceFinalizeHook().run(hook_ctx)
         await service.store.flush()
         result = service.store.read_events("sess-1")
-        assert not [
-            e for e in result["events"] if e["type"] == "agent/spawn"
-        ]
+        assert not [e for e in result["events"] if e["type"] == "agent/spawn"]
 
 
 def text_msg(role, content):
@@ -413,6 +405,60 @@ class TestModelCall:
         # Unknown/bulky kwargs are not part of the digest.
         assert "tools" not in options
         assert "messages" not in options
+
+    async def test_messages_meta_buckets_no_content(
+        self,
+        service,
+        hook_ctx,
+    ):
+        await AgentTraceRunStartHook().run(hook_ctx)
+        long_user = "u" * 5_000
+
+        async def next_handler(**kwargs):
+            return SimpleNamespace(text="a")
+
+        await TraceMiddleware().on_model_call(
+            agent=None,
+            input_kwargs={
+                "messages": [
+                    text_msg("system", "sys prompt"),
+                    text_msg("user", long_user),
+                    text_msg("tool", "tool output"),
+                    text_msg("assistant", "answer"),
+                ],
+            },
+            next_handler=next_handler,
+        )
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        call = [e for e in events if e["type"] == "llm/call"][0]
+        meta = call["data"]["messages_meta"]
+        assert meta["count"] == 4
+        assert meta["total_chars"] == len("sys prompt") + 5_000 + len(
+            "tool output",
+        ) + len("answer")
+        assert meta["chars_by_role"] == {
+            "system": len("sys prompt"),
+            "user": 5_000,
+            "tool": len("tool output"),
+            "assistant": len("answer"),
+        }
+        assert meta["count_by_role"] == {
+            "system": 1,
+            "user": 1,
+            "tool": 1,
+            "assistant": 1,
+        }
+        assert meta["max_tool_chars"] == len("tool output")
+        # Size-only accounting: every recorded value is an integer — the
+        # full user text must NOT appear anywhere in messages_meta.
+        assert all(isinstance(v, int) for v in meta["chars_by_role"].values())
+        assert "u" * 200 not in json.dumps(meta)
+        # The digest still truncates; the meta keeps the full length.
+        digest_user = [
+            m for m in call["data"]["messages"] if m["role"] == "user"
+        ][0]
+        assert len(digest_user["text"]) < 5_000
 
     async def test_streaming_records_assembled_output(
         self,
@@ -672,6 +718,40 @@ class TestActing:
         assert call["data"]["input"] == '{"text": "hi"}'
         assert result["data"]["ok"] is True
         assert result["data"]["output"] == "tool done"
+
+    async def test_tool_output_size_recorded_pre_truncation(
+        self,
+        service,
+        hook_ctx,
+    ):
+        await AgentTraceRunStartHook().run(hook_ctx)
+        big = "x" * 10_000
+
+        async def next_handler():
+            yield ToolResponse(
+                content=[TextBlock(type="text", text=big)],
+            )
+
+        async for _ in TraceMiddleware().on_acting(
+            agent=None,
+            input_kwargs={
+                "tool_call": SimpleNamespace(
+                    name="flood",
+                    input="{}",
+                    id="tc-big",
+                ),
+            },
+            next_handler=next_handler,
+        ):
+            pass
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        result = [e for e in events if e["type"] == "tool/result"][0]
+        # The payload is truncated by the store (max_payload_chars)…
+        assert len(result["data"]["output"]) <= 4_100
+        # …but the pre-truncation size survives.
+        assert result["data"]["output_chars"] == 10_000
+        assert result["data"]["output_bytes"] == len(big.encode("utf-8"))
 
     async def test_dict_input_serialized(self, service, hook_ctx):
         await AgentTraceRunStartHook().run(hook_ctx)

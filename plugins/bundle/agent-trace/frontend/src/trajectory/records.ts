@@ -73,6 +73,31 @@ export interface InboundPart {
   text?: string;
 }
 
+/**
+ * Size-only accounting of a model call's input messages (from
+ * llm/call): aggregated character counts per role, no content.
+ */
+export interface MessagesMeta {
+  count: number;
+  totalChars: number;
+  charsByRole: Record<string, number>;
+  countByRole: Record<string, number>;
+  maxToolChars: number;
+}
+
+/**
+ * Rough chars→token estimate. Content is not stored, so the ratio is
+ * picked from the model family (UI labels these values "estimated").
+ */
+export function estimateTokensFromChars(chars: number, model?: string): number {
+  const name = (model ?? "").toLowerCase();
+  let charsPerToken = 4;
+  if (name.includes("qwen")) charsPerToken = 2.2;
+  else if (name.includes("deepseek")) charsPerToken = 2.5;
+  else if (name.includes("claude")) charsPerToken = 3.6;
+  return Math.round(chars / charsPerToken);
+}
+
 /** One ledger row: a user input, an LLM call, a tool call, or a marker. */
 export interface TrajectoryRecord {
   index: number;
@@ -95,6 +120,8 @@ export interface TrajectoryRecord {
   /* assistant */
   model?: string;
   provider?: string;
+  /* size-only input accounting (from llm/call messages_meta) */
+  messagesMeta?: MessagesMeta;
   outputText?: string;
   thinkingText?: string;
   usage?: UsageInfo;
@@ -105,6 +132,9 @@ export interface TrajectoryRecord {
   toolName?: string;
   toolInput?: string;
   toolOutput?: string;
+  /* pre-truncation output size (from tool/result) */
+  toolOutputChars?: number;
+  toolOutputBytes?: number;
   toolError?: string;
   /* system marker */
   marker?: string;

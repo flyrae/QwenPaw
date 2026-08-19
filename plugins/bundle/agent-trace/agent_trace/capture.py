@@ -62,9 +62,7 @@ def _safe_append(
     if service is None:
         return
     try:
-        payload = (
-            service.sanitize(data) if service.enabled else data
-        )
+        payload = service.sanitize(data) if service.enabled else data
         service.store.append(
             run.session_id,
             event_type,
@@ -349,6 +347,54 @@ def _messages_digest(messages: Any) -> list:
     return digest
 
 
+def _messages_meta(messages: Any) -> dict:
+    """Size-only accounting of the input messages of a model call.
+
+    Per-message content is deliberately NOT kept (the digest already
+    truncates at 200 chars); instead we record aggregated character
+    counts per role, so each round's input can be decomposed into
+    system / user / assistant / tool buckets without storing content
+    and without per-message storage growth (one fixed-size dict).
+    """
+    counts: dict = {}
+    chars: dict = {}
+    max_tool_chars = 0
+    total = 0
+    number = 0
+    for msg in messages or []:
+        if isinstance(msg, dict):
+            role = str(msg.get("role") or "other")
+            content = msg.get("content")
+        else:
+            role = str(getattr(msg, "role", "") or "other")
+            content = getattr(msg, "content", None)
+        length = len(_block_texts(content))
+        number += 1
+        counts[role] = counts.get(role, 0) + 1
+        chars[role] = chars.get(role, 0) + length
+        total += length
+        if role == "tool" and length > max_tool_chars:
+            max_tool_chars = length
+    return {
+        "count": number,
+        "total_chars": total,
+        "chars_by_role": chars,
+        "count_by_role": counts,
+        "max_tool_chars": max_tool_chars,
+    }
+
+
+def _output_size_meta(content: Any) -> dict:
+    """Pre-truncation size of a tool output (the store truncates the
+    text payload to max_payload_chars; the full size answers \"which
+    tool floods the context\" and is cheap to keep)."""
+    text = _block_texts(content)
+    return {
+        "output_chars": len(text),
+        "output_bytes": len(text.encode("utf-8")),
+    }
+
+
 def _system_prompt(messages: Any) -> str:
     """Text of the first system-role message, if any."""
     for msg in messages or []:
@@ -370,9 +416,7 @@ def _tools_digest(tools: Any) -> list:
         if isinstance(tool, dict):
             function = tool.get("function")
             name = tool.get("name") or (
-                function.get("name")
-                if isinstance(function, dict)
-                else None
+                function.get("name") if isinstance(function, dict) else None
             )
             desc = tool.get("description") or (
                 function.get("description")
@@ -429,9 +473,7 @@ def _maybe_record_header(
             return
         prev = service.last_header_sha(run.session_id)
         service.set_last_header_sha(run.session_id, sha)
-        schemas = (
-            list(tools) if isinstance(tools, (list, tuple)) else []
-        )
+        schemas = list(tools) if isinstance(tools, (list, tuple)) else []
         service.store.append(
             run.session_id,
             ev.EVENT_LLM_HEADER,
@@ -759,7 +801,8 @@ class AgentTraceRunEndHook(HookBase):
             {
                 "status": STATUS_SUCCESS,
                 "duration_ms": round(
-                    (time.time() - run.started_at) * 1000.0, 1
+                    (time.time() - run.started_at) * 1000.0,
+                    1,
                 ),
             },
         )
@@ -783,9 +826,7 @@ class AgentTraceErrorHook(HookBase):
             run.error = None
         else:
             run.status = STATUS_ERROR
-            run.error = (
-                _error_text(error) if error is not None else "unknown"
-            )
+            run.error = _error_text(error) if error is not None else "unknown"
         return HookResult()
 
 
@@ -795,6 +836,7 @@ class AgentTraceFinalizeHook(HookBase):
     FINALLY also runs on the cancelled/timed-out paths, so it is the
     safety net that guarantees every ``run/start`` gets a ``run/end``.
     """
+
     phase = Phase.FINALLY
     name = "agent_trace_finalize"
     priority = 60
@@ -807,7 +849,8 @@ class AgentTraceFinalizeHook(HookBase):
             data: dict = {
                 "status": run.status,
                 "duration_ms": round(
-                    (time.time() - run.started_at) * 1000.0, 1
+                    (time.time() - run.started_at) * 1000.0,
+                    1,
                 ),
             }
             if run.error:
@@ -826,6 +869,24 @@ class AgentTraceFinalizeHook(HookBase):
 # ----------------------------------------------------------------------
 # AgentScope middleware
 # ----------------------------------------------------------------------
+
+
+def _llm_call_payload(
+    model_hint: str,
+    provider_hint: Optional[str],
+    messages: list,
+    input_kwargs: dict,
+) -> dict:
+    """Payload of one llm/call event (model, digests, size meta, options)."""
+    return {
+        "model": model_hint,
+        **({"provider": provider_hint} if provider_hint else {}),
+        "messages_count": len(messages),
+        "last_user_text": _last_user_text(messages),
+        "messages": _messages_digest(messages),
+        "messages_meta": _messages_meta(messages),
+        "options": _options_digest(input_kwargs),
+    }
 
 
 class TraceMiddleware(MiddlewareBase):
@@ -858,14 +919,12 @@ class TraceMiddleware(MiddlewareBase):
         _safe_append(
             run,
             ev.EVENT_LLM_CALL,
-            {
-                "model": model_hint,
-                **({"provider": provider_hint} if provider_hint else {}),
-                "messages_count": len(messages),
-                "last_user_text": _last_user_text(messages),
-                "messages": _messages_digest(messages),
-                "options": _options_digest(input_kwargs),
-            },
+            _llm_call_payload(
+                model_hint,
+                provider_hint,
+                messages,
+                input_kwargs,
+            ),
         )
         start = time.perf_counter()
 
@@ -1020,6 +1079,9 @@ class TraceMiddleware(MiddlewareBase):
                     "output": _block_texts(
                         getattr(final_response, "content", None),
                     ),
+                    **_output_size_meta(
+                        getattr(final_response, "content", None),
+                    ),
                     "tool_call_id": getattr(tool_call, "id", None),
                     **(
                         {"note": "stream closed early"}
@@ -1048,6 +1110,9 @@ class TraceMiddleware(MiddlewareBase):
                 "ok": True,
                 "duration_ms": _elapsed_ms(start),
                 "output": _block_texts(
+                    getattr(final_response, "content", None),
+                ),
+                **_output_size_meta(
                     getattr(final_response, "content", None),
                 ),
                 "tool_call_id": getattr(tool_call, "id", None),

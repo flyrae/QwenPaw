@@ -28,6 +28,16 @@ function dataOf(event: TraceEvent | null | undefined): Record<string, unknown> {
   return (event?.data ?? {}) as Record<string, unknown>;
 }
 
+/** True when the value is a plain {string: number} record. */
+function isCharsRecord(value: unknown): value is Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  return Object.values(value).every(
+    (item) => typeof item === "number" && Number.isFinite(item),
+  );
+}
+
 function firstLine(text: string | undefined, max = 160): string {
   if (!text) return "";
   const line = text.split("\n", 1)[0].trim();
@@ -379,6 +389,30 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           Object.keys(callData.options as object).length > 0
             ? (callData.options as Record<string, unknown>)
             : undefined;
+        const rawMeta = callData.messages_meta as Record<
+          string,
+          unknown
+        > | null;
+        const messagesMeta =
+          rawMeta && typeof rawMeta === "object"
+            ? {
+                count: typeof rawMeta.count === "number" ? rawMeta.count : 0,
+                totalChars:
+                  typeof rawMeta.total_chars === "number"
+                    ? rawMeta.total_chars
+                    : 0,
+                charsByRole: isCharsRecord(rawMeta.chars_by_role)
+                  ? rawMeta.chars_by_role
+                  : {},
+                countByRole: isCharsRecord(rawMeta.count_by_role)
+                  ? rawMeta.count_by_role
+                  : {},
+                maxToolChars:
+                  typeof rawMeta.max_tool_chars === "number"
+                    ? rawMeta.max_tool_chars
+                    : 0,
+              }
+            : undefined;
         const cell: TrajectoryRecord = {
           index: ++index,
           runIndex: 0,
@@ -394,6 +428,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
             typeof callData.provider === "string" && callData.provider
               ? callData.provider
               : undefined,
+          messagesMeta,
           options,
         };
         appendCell(event.run_id, cell);
@@ -508,6 +543,14 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           isError: !ok,
           running: false,
           toolOutput: output,
+          toolOutputChars:
+            typeof data.output_chars === "number"
+              ? data.output_chars
+              : undefined,
+          toolOutputBytes:
+            typeof data.output_bytes === "number"
+              ? data.output_bytes
+              : undefined,
           toolError: data.error ? String(data.error) : undefined,
           note: data.note ? String(data.note) : undefined,
         };

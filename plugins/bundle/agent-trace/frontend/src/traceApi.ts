@@ -201,26 +201,23 @@ export async function deleteSessionRemote(sessionId: string): Promise<void> {
   });
 }
 
-/** Console-local chat ids look like "<ms-timestamp>-<rand>". */
-export const LOCAL_CHAT_ID_PATTERN = /^\d+-[a-z0-9]+$/;
-
 /**
  * Map the Console's current-session id to a backend trace session id.
- * Local chat ids resolve through /resolve (chats.json index); anything
- * else (backend UUID shape) passes through as-is. Best-effort: returns
- * null when the id cannot be resolved.
+ * Console chat ids come in more than one local shape (timestamp-random
+ * or UUID), so no client-side pattern guessing — /resolve answers for
+ * every form (backend trace ids resolve to themselves, unknown → null).
+ * Falls back to the raw id when the API is unreachable.
  */
 export async function resolveTraceSessionId(
   raw: string | null,
 ): Promise<string | null> {
   if (!raw) return null;
-  if (!LOCAL_CHAT_ID_PATTERN.test(raw)) return raw;
   try {
     const body = await requestJson<{ session_id: string | null }>(
       `/agent-trace/resolve?chat_id=${encodeURIComponent(raw)}`,
     );
     return body.session_id ?? null;
   } catch {
-    return null;
+    return raw;
   }
 }

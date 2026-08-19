@@ -13,12 +13,14 @@ import { storedLocale, t } from "../locale";
 import { collapseContext, diffLines, diffStats } from "./diff";
 import type { TrajectoryRecord } from "./records";
 import {
+  estimateTokensFromChars,
   formatEpochMs,
   formatSeconds,
   formatThroughput,
   formatTokens,
   recordKindLabel,
 } from "./records";
+import { formatBytes } from "../uiShared";
 
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
@@ -51,6 +53,17 @@ export interface RequestSummary {
   errors: string[];
   options?: Record<string, unknown>;
   resultIndex?: number;
+  /** Size-only input decomposition of this run's model calls. */
+  inputComposition?: {
+    charsByRole: Record<string, number>;
+    totalChars: number;
+    maxToolChars: number;
+  };
+  /** Billed-input growth vs the previous run (delta accounting). */
+  growth?: {
+    prevInputTokens: number | null;
+    deltaTokens: number;
+  };
   sessionTotals?: {
     inputTokens: number;
     outputTokens: number;
@@ -262,6 +275,107 @@ function OverviewSection({
   );
 }
 
+const ROLE_BUCKET_ORDER = ["system", "user", "assistant", "tool"] as const;
+
+const ROLE_LABEL_KEYS: Record<
+  string,
+  "roleSystem" | "roleUser" | "roleAssistant" | "roleTool" | "roleOther"
+> = {
+  system: "roleSystem",
+  user: "roleUser",
+  assistant: "roleAssistant",
+  tool: "roleTool",
+};
+
+/**
+ * Input composition buckets (chars only, from size-only capture) with
+ * chars→tokens estimates labelled as such — totals are exact, the
+ * per-bucket token split is an estimate by model-family ratio.
+ */
+function InputCompositionSection({
+  request,
+  locale,
+}: {
+  request: RequestSummary;
+  locale: ReturnType<typeof storedLocale>;
+}) {
+  const composition = request.inputComposition;
+  if (!composition) return null;
+  const model = request.models[0];
+  const rows: ReactNS.ReactNode[] = [];
+  const known = new Set<string>(ROLE_BUCKET_ORDER);
+  const orderedRoles = [
+    ...ROLE_BUCKET_ORDER.filter((role) => composition.charsByRole[role]),
+    ...Object.keys(composition.charsByRole).filter(
+      (role) => !known.has(role) && composition.charsByRole[role],
+    ),
+  ];
+  for (const role of orderedRoles) {
+    const chars = composition.charsByRole[role];
+    const labelKey = ROLE_LABEL_KEYS[role] ?? "roleOther";
+    rows.push(
+      <KeyValue
+        key={role}
+        label={t(locale, labelKey)}
+        value={`${formatTokens(chars)} ${t(
+          locale,
+          "charUnit",
+        )} · ~${formatTokens(estimateTokensFromChars(chars, model))} tok ${t(
+          locale,
+          "estimatedTag",
+        )}`}
+      />,
+    );
+  }
+  if (composition.maxToolChars > 0) {
+    rows.push(
+      <KeyValue
+        key="max-tool"
+        label={t(locale, "maxToolMsg")}
+        value={`${formatTokens(composition.maxToolChars)} ${t(
+          locale,
+          "charUnit",
+        )}`}
+      />,
+    );
+  }
+  return (
+    <>
+      <Text strong style={{ fontSize: 12, display: "block", marginTop: 10 }}>
+        {t(locale, "inputComposition")}
+      </Text>
+      {rows}
+      <Text
+        type="secondary"
+        style={{ fontSize: 11, display: "block", padding: "2px 0" }}
+      >
+        {t(locale, "estimateNote")}
+      </Text>
+      {request.growth ? (
+        <>
+          <KeyValue
+            label={t(locale, "growthVsPrev")}
+            value={
+              request.growth.prevInputTokens === null
+                ? t(locale, "firstRound")
+                : `${request.growth.deltaTokens >= 0 ? "+" : ""}${formatTokens(
+                    request.growth.deltaTokens,
+                  )} tok`
+            }
+          />
+          {request.growth.prevInputTokens !== null &&
+          request.growth.deltaTokens > 0 ? (
+            <KeyValue
+              label={t(locale, "cacheAbsorbed")}
+              value={`${formatTokens(request.cacheReadTokens)} tok`}
+            />
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
 function RequestInspector({
   request,
   onJumpRecord,
@@ -368,6 +482,7 @@ function RequestInspector({
             {t(locale, "thisRequest")}
           </Text>
           {usageRows}
+          <InputCompositionSection request={request} locale={locale} />
           {request.sessionTotals ? (
             <>
               <Text
@@ -779,6 +894,25 @@ export function Inspector({
         ) : null}
         {selected.toolName ? (
           <KeyValue label="Tool" value={selected.toolName} />
+        ) : null}
+        {selected.toolOutputChars ? (
+          <KeyValue
+            label={t(locale, "outputSize")}
+            value={
+              selected.toolOutputBytes
+                ? `${formatTokens(selected.toolOutputChars)} ${t(
+                    locale,
+                    "charUnit",
+                  )} · ${formatBytes(selected.toolOutputBytes)} (${t(
+                    locale,
+                    "beforeTruncation",
+                  )})`
+                : `${formatTokens(selected.toolOutputChars)} ${t(
+                    locale,
+                    "charUnit",
+                  )}`
+            }
+          />
         ) : null}
         {selected.kind === "user" && (selected.channel || selected.userId) ? (
           <KeyValue

@@ -39,10 +39,10 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | `message/inbound` | PRE_EXECUTE(15)，run 开启后 | 类型化 content parts（text/image/video/file）+ channel_meta 摘要 |
 | `run/start` | PRE_EXECUTE(14) | query、输入消息摘要、trigger、channel；子代理运行附 `root_session_id`/`root_agent_id` |
 | `llm/header` | 首次及每次变更 | sha256 内容哈希、`prev_sha256` 链、系统提示词全文（独立 200k 上限）、工具名列表 + **完整 schema** |
-| `llm/call` | 每次模型调用 | model、messages 摘要（每条截 200 字符）、**options 参数摘要**（temperature/top_p/max_tokens/stream…） |
+| `llm/call` | 每次模型调用 | model、messages 摘要（每条截 200 字符）、**messages_meta 尺寸记账**（按 role 聚合的字符/条数 + 最大工具消息，只记数字不存内容，v0.3.1）、**options 参数摘要**（temperature/top_p/max_tokens/stream…） |
 | `llm/result` | 调用结束 | 输出全文、thinking、模型发出的 tool_calls、usage（含 cache read/write）、`timing`（TTFT/解码时长，流式）、错误 |
 | `tool/call` | on_acting 进入 | 工具名、原始入参、tool_call_id |
-| `tool/result` | 完成/异常/GeneratorExit | 输出、耗时、错误、note（提前关闭标注） |
+| `tool/result` | 完成/异常/GeneratorExit | 输出、耗时、错误、note（提前关闭标注）、**output_chars/output_bytes（截断前完整大小，v0.3.1）** |
 | `approval/asked` | ApprovalService.create_pending **及 create_pending_summary** 补丁 | 工具名、severity、findings、摘要、`source_type`（tool_guard / driver_policy / harness / 插件）；**归属当前活跃 run** |
 | `approval/decided` | resolve_request / cancel_stale / cancel_all 补丁 | approved/denied/timed_out/cancelled/**superseded** + scope；asked 时记住 run 映射（上限 1024，FIFO 逐出），跨会话决策也落回原 run；批量取消**逐条落回各自会话文件** |
 | `agent/spawn` | 子代理 run 开启时写入**根会话**文件 | child_session_id / child_agent_id / child_trace_id |
@@ -135,6 +135,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | （本次） | 审批补丁复核修复：包装 `create_pending_summary`（driver gate/harness/computer-use 路径）、`cancel_stale` superseded 事件、cancel_all 逐条落回子会话、身份校验式 restore 防 qwenpaw-pet 互踩、ask-run 映射容量上限；88 测试 |
 | （本次） | 台账可读性：入站报文**合并进 USER 行**（来源渠道/用户/多媒体部件，旧数据降级为可读独立行），出站报文改为一行**回执**（渠道 + 字数，不再重复回复正文） |
 | （本次） | 标记行细分：审批（🛡盾牌/volcano）、回执（📤发送/cyan）、子代理（🚀火箭/geekblue）、提示词（📄文档/green）、错误（⭕红）各有专属标签与图标，不再共用"标记"；Inspector Kind 字段同步 |
+| （v0.3.1） | **输入/信息量归因**：`llm/call.messages_meta` 按 role 聚合字符记账（不存内容，固定大小）；`tool/result.output_chars/output_bytes` 记录截断前完整大小；请求检查器 Usage 页新增**输入构成四桶**（system/user/assistant/tool，字符→token 按模型系数估算并标注）、**最大单条工具消息**、**跨轮输入增量对账**（input[n]−input[n−1]，配合缓存命中显示增量被吸收情况）；工具记录 Summary 显示截断前输出大小；91 测试 |
 
 ## 11. 后续路线（未做，按价值排序）
 
