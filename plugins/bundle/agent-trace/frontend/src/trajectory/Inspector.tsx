@@ -1024,6 +1024,112 @@ export function Inspector({
                 {t(locale, "contextReset")}
               </Text>
             ) : null}
+            {selected.resetDetail ? (
+              <div
+                style={{
+                  border: "1px solid rgba(250,173,20,0.4)",
+                  borderRadius: 6,
+                  padding: "6px 8px",
+                }}
+              >
+                <KeyValue
+                  label={t(locale, "resetBreakAt")}
+                  value={`#${selected.resetDetail.breakAt + 1}`}
+                />
+                <KeyValue
+                  label={t(locale, "resetSizes")}
+                  value={`${selected.resetDetail.beforeCount} ${t(
+                    locale,
+                    "resetMsgs",
+                  )} · ${formatTokens(selected.resetDetail.beforeChars)} ${t(
+                    locale,
+                    "charUnit",
+                  )} → ${selected.resetDetail.afterCount} ${t(
+                    locale,
+                    "resetMsgs",
+                  )} · ${formatTokens(selected.resetDetail.afterChars)} ${t(
+                    locale,
+                    "charUnit",
+                  )}`}
+                />
+                <KeyValue
+                  label={t(locale, "resetRoles")}
+                  value={
+                    Object.keys(selected.resetDetail.afterByRole)
+                      .map((role) => {
+                        const before =
+                          selected.resetDetail!.beforeByRole[role] ?? 0;
+                        const after =
+                          selected.resetDetail!.afterByRole[role] ?? 0;
+                        return before === after
+                          ? null
+                          : `${role} ${before}→${after}`;
+                      })
+                      .filter(Boolean)
+                      .join(" · ") || "-"
+                  }
+                />
+                {selected.resetDetail.changes.length > 0 ? (
+                  <div style={{ marginTop: 4 }}>
+                    <Text strong style={{ fontSize: 12 }}>
+                      {t(locale, "resetChanges")}
+                    </Text>
+                    {selected.resetDetail.changes
+                      .slice(0, 20)
+                      .map((change, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            gap: 6,
+                            alignItems: "baseline",
+                          }}
+                        >
+                          <Tag
+                            color={
+                              change.status === "kept"
+                                ? "default"
+                                : change.status === "rewritten"
+                                ? "orange"
+                                : change.status === "removed"
+                                ? "red"
+                                : "green"
+                            }
+                            style={{ marginInlineEnd: 0, fontSize: 10 }}
+                          >
+                            {change.status}
+                          </Tag>
+                          <Text code style={{ fontSize: 11, flexShrink: 0 }}>
+                            {change.role}
+                          </Text>
+                          {change.status === "rewritten" ? (
+                            <Text
+                              type="secondary"
+                              style={{ fontSize: 11, minWidth: 0 }}
+                              ellipsis={true}
+                            >
+                              {`${(change.oldText ?? "").slice(0, 40)} → ${(
+                                change.newText ?? ""
+                              ).slice(0, 40)}`}
+                            </Text>
+                          ) : (
+                            <Text
+                              type="secondary"
+                              style={{ fontSize: 11, minWidth: 0 }}
+                              ellipsis={true}
+                            >
+                              {(change.oldText ?? change.newText ?? "").slice(
+                                0,
+                                60,
+                              )}
+                            </Text>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {selected.messagesMeta ? (
               <KeyValue
                 label={t(locale, "inputTotal")}

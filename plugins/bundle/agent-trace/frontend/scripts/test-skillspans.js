@@ -1,8 +1,8 @@
 /**
- * Node test for the skill-span state machine (trajectory/skillSpans.ts).
- * Compiles the single TS module with tsc into a temp dir, then runs the
- * edge-case matrix from DESIGN.md plus the WP4 feature-index cases as
- * plain assertions inside the build guard chain.
+ * Node test for the skill-span state machine and the context-reset
+ * localization diff (trajectory/skillSpans.ts + records.ts).
+ * Compiles the two TS modules with tsc into a temp dir, then runs the
+ * edge-case matrices as plain assertions inside the build guard chain.
  */
 const { execFileSync } = require("child_process");
 const fs = require("fs");
@@ -22,12 +22,15 @@ execFileSync(
   [
     tsc,
     path.join(root, "src", "trajectory", "skillSpans.ts"),
+    path.join(root, "src", "trajectory", "records.ts"),
     "--outDir",
     tmp,
     "--module",
     "commonjs",
     "--target",
     "es2020",
+    "--lib",
+    "es2021,dom",
     "--skipLibCheck",
   ],
   { stdio: "inherit" },
@@ -40,7 +43,11 @@ const {
   skillHue,
   spanDurationMs,
   spanEndT,
-} = require(path.join(tmp, "skillSpans.js"));
+} = require(path.join(tmp, "trajectory", "skillSpans.js"));
+const {
+  diffContextReset,
+  estimateTokensFromChars,
+} = require(path.join(tmp, "trajectory", "records.js"));
 
 let failures = 0;
 function check(name, cond) {
@@ -101,10 +108,7 @@ function check(name, cond) {
   tr.onSkillLoad("docx", 5, 100);
   tr.onSkillLoad("docx", 9, 200);
   const [s] = tr.spans();
-  check(
-    "3 single span, loadSeq updated",
-    s.trigger === "load" && s.loadSeq === 9,
-  );
+  check("3 single span, loadSeq updated", s.trigger === "load" && s.loadSeq === 9);
 }
 
 // ── case 4: two skills — recent one takes temporal attribution ────────
@@ -147,10 +151,7 @@ function check(name, cond) {
     t: 100,
   });
   let [s] = tr.spans();
-  check(
-    "5 bypass opens resource span",
-    s.trigger === "resource" && s.bypass === true,
-  );
+  check("5 bypass opens resource span", s.trigger === "resource" && s.bypass === true);
   tr.onSkillLoad("pdf", 6, 200);
   [s] = tr.spans();
   check("5 late load clears bypass", s.bypass === false && s.loadSeq === 6);
@@ -164,9 +165,7 @@ function check(name, cond) {
   const [s] = tr.spans();
   check(
     "6 empty span survives with null activity",
-    s.attributedIndexes.length === 0 &&
-      s.lastActivitySeq === null &&
-      spanEndT(s) === 400,
+    s.attributedIndexes.length === 0 && s.lastActivitySeq === null && spanEndT(s) === 400,
   );
 }
 
@@ -178,10 +177,7 @@ function check(name, cond) {
   const [a, b] = tr.spans();
   check(
     "10 both spans coexist",
-    a.skill === "xlsx" &&
-      a.trigger === "slash" &&
-      b.skill === "pdf" &&
-      b.trigger === "load",
+    a.skill === "xlsx" && a.trigger === "slash" && b.skill === "pdf" && b.trigger === "load",
   );
 }
 
@@ -224,32 +220,77 @@ check(
     ["pdf", feats],
     [
       "xlsx",
-      buildSkillFeatures(
-        "# xlsx\n```bash\npython scripts/xlsx_run.py data.xlsx\n```",
-      ),
+      buildSkillFeatures("# xlsx\n```bash\npython scripts/xlsx_run.py data.xlsx\n```"),
     ],
   ]);
   check(
     "W4 unique hit",
-    matchSkillFeatures(
-      "cd /tmp && python scripts/pdf_extract.py a.docx",
-      indexes,
-    )?.skill === "pdf",
+    matchSkillFeatures("cd /tmp && python scripts/pdf_extract.py a.docx", indexes)
+      ?.skill === "pdf",
   );
-  check(
-    "W4 no hit returns null",
-    matchSkillFeatures("echo hello world", indexes) === null,
-  );
+  check("W4 no hit returns null", matchSkillFeatures("echo hello world", indexes) === null);
   const both = new Map([
     ["a", buildSkillFeatures("```bash\npython scripts/shared_tool.py\n```")],
-    [
-      "b",
-      buildSkillFeatures("# b\n```bash\npython scripts/shared_tool.py\n```"),
-    ],
+    ["b", buildSkillFeatures("# b\n```bash\npython scripts/shared_tool.py\n```")],
   ]);
   check(
     "W4 ambiguous returns null",
     matchSkillFeatures("python scripts/shared_tool.py", both) === null,
+  );
+}
+
+// ── context-reset localization ─────────────────────────────────────────
+{
+  check("reset fn exported", typeof diffContextReset === "function");
+  const oldList = [
+    { role: "system", chars: 100, text: "sys".padEnd(100, "a") },
+    { role: "user", chars: 10, text: "hello" },
+    { role: "assistant", chars: 20, text: "old answer one" },
+    { role: "assistant", chars: 20, text: "old answer two" },
+    { role: "tool", chars: 30, text: "tool output kept" },
+  ];
+  // Compaction: prefix kept, two assistant messages summarized into one,
+  // the old tool message re-attached after the summary.
+  const newList = [
+    oldList[0],
+    oldList[1],
+    { role: "assistant", chars: 15, text: "summary of history" },
+    oldList[4],
+  ];
+  const d = diffContextReset(oldList, newList);
+  check("reset breakAt", d.breakAt === 2);
+  check("reset counts", d.beforeCount === 5 && d.afterCount === 4);
+  check(
+    "reset role changes",
+    d.beforeByRole.assistant === 2 && d.afterByRole.assistant === 1,
+  );
+  const statuses = d.changes.map((c) => c.status);
+  check(
+    "reset rewritten pairing",
+    statuses.includes("rewritten") &&
+      d.changes.find((c) => c.status === "rewritten").oldText === "old answer one",
+  );
+  check("reset removed leftover", statuses.includes("removed"));
+  // Truncation: prefix kept, tail dropped.
+  const shrunk = diffContextReset(oldList, oldList.slice(0, 2));
+  check(
+    "reset truncation",
+    shrunk.breakAt === 2 && shrunk.afterCount === 2 && shrunk.afterChars === 110,
+  );
+  // Pure growth: everything kept plus appended messages.
+  const grew = diffContextReset(oldList, [
+    ...oldList,
+    { role: "user", chars: 5, text: "new q" },
+  ]);
+  check(
+    "reset pure growth",
+    grew.breakAt === 5 &&
+      grew.changes.some((c) => c.status === "added" && c.role === "user"),
+  );
+  // Sanity: token estimator stays intact after the module edits.
+  check(
+    "estimator intact",
+    estimateTokensFromChars(8800, "qwen3-max") === 4000,
   );
 }
 

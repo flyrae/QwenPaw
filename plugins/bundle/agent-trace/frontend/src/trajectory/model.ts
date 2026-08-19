@@ -11,12 +11,14 @@ import type { TraceEvent } from "../traceApi";
 import type {
   InboundPart,
   MessageDigest,
+  ResetDiffMessage,
   TimingInfo,
   TrajectoryRecord,
   TrajectoryTurnModel,
   UsageInfo,
 } from "./records";
-import { epochMs } from "./records";
+import { diffContextReset, epochMs } from "./records";
+import type { ContextResetDetail } from "./records";
 import {
   SkillSpanTracker,
   buildSkillFeatures,
@@ -156,6 +158,11 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   // (the Skill tool result text) — WP4 attribution evidence.
   const skillFeatures = new Map<string, string[]>();
   const skillShaBySkill = new Map<string, string>();
+  // Context input reconstructed from messages_new increments (for
+  // localizing context_reset rewrites) + the previous call's digest
+  // as the structural fallback for older traces.
+  let accumulatedInput: ResetDiffMessage[] = [];
+  let prevCallDigest: Array<{ role: string; text: string }> = [];
   let index = 0;
   let runNumber = 0;
 
@@ -524,6 +531,57 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
                     : 0,
               }
             : undefined;
+        // Context-reset localization: compare the full re-recorded
+        // input against the input reconstructed from the increments.
+        const currentInputNew = parseInputNew(callData.messages_new);
+        let resetDetail: ContextResetDetail | undefined;
+        if (callData.context_reset === true) {
+          const newList: ResetDiffMessage[] = (currentInputNew ?? []).map(
+            (message) => ({
+              role: message.role,
+              chars: message.chars,
+              text: message.text,
+            }),
+          );
+          let oldList: ResetDiffMessage[];
+          if (accumulatedInput.length > 0 || newList.length === 0) {
+            oldList = accumulatedInput;
+          } else {
+            // Old traces (no messages_new): structural diff from the
+            // previous call's 200-char digest.
+            oldList = prevCallDigest.map((message) => ({
+              role: message.role,
+              text: message.text,
+            }));
+          }
+          resetDetail = diffContextReset(oldList, newList);
+          if (messagesMeta) {
+            resetDetail.afterChars = messagesMeta.totalChars;
+          }
+        }
+        if (currentInputNew) {
+          accumulatedInput =
+            callData.context_reset === true
+              ? currentInputNew.map((message) => ({
+                  role: message.role,
+                  chars: message.chars,
+                  text: message.text,
+                }))
+              : [
+                  ...accumulatedInput,
+                  ...currentInputNew.map((message) => ({
+                    role: message.role,
+                    chars: message.chars,
+                    text: message.text,
+                  })),
+                ];
+        }
+        prevCallDigest = Array.isArray(callData.messages)
+          ? (callData.messages as MessageDigest[]).map((message) => ({
+              role: message.role,
+              text: message.text,
+            }))
+          : [];
         const cell: TrajectoryRecord = {
           index: ++index,
           runIndex: 0,
@@ -540,8 +598,9 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
               ? callData.provider
               : undefined,
           messagesMeta,
-          inputNew: parseInputNew(callData.messages_new),
+          inputNew: currentInputNew,
           contextReset: callData.context_reset === true,
+          resetDetail,
           options,
         };
         appendCell(event.run_id, cell);

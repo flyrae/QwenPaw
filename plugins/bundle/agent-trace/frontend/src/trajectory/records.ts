@@ -111,6 +111,156 @@ export function estimateTokensFromChars(chars: number, model?: string): number {
   return Math.round(chars / charsPerToken);
 }
 
+// ── Context-reset localization ──────────────────────────────────────────
+//
+// A context_reset call re-records the full input; comparing it with the
+// input reconstructed from the previous increments (or, on old traces,
+// with the previous call's 200-char digest) localizes WHERE the context
+// was rewritten: the breakpoint, before/after sizes, per-role changes,
+// and a per-message kept/removed/rewritten/added classification.
+
+export interface ResetDiffMessage {
+  role: string;
+  chars?: number;
+  text?: string;
+}
+
+export interface ContextResetChange {
+  status: "kept" | "removed" | "rewritten" | "added";
+  role: string;
+  oldText?: string;
+  newText?: string;
+}
+
+export interface ContextResetDetail {
+  /** First divergent position (0-based) — kept prefix length. */
+  breakAt: number;
+  beforeCount: number;
+  afterCount: number;
+  beforeChars: number;
+  afterChars: number;
+  beforeByRole: Record<string, number>;
+  afterByRole: Record<string, number>;
+  /** Per-message classification after the kept prefix (capped). */
+  changes: ContextResetChange[];
+}
+
+const RESET_CHANGE_CAP = 60;
+
+function resetKey(message: ResetDiffMessage): string {
+  return `${message.role}|${message.text ?? `#${message.chars ?? 0}`}`;
+}
+
+function charsOf(message: ResetDiffMessage): number {
+  return message.chars ?? (message.text ? message.text.length : 0);
+}
+
+function countByRole(
+  list: readonly ResetDiffMessage[],
+): Record<string, number> {
+  const byRole: Record<string, number> = {};
+  for (const message of list) {
+    byRole[message.role] = (byRole[message.role] ?? 0) + 1;
+  }
+  return byRole;
+}
+
+/** Localize a context rewrite by diffing the old vs new input lists. */
+export function diffContextReset(
+  oldList: readonly ResetDiffMessage[],
+  newList: readonly ResetDiffMessage[],
+): ContextResetDetail {
+  let breakAt = 0;
+  while (
+    breakAt < oldList.length &&
+    breakAt < newList.length &&
+    resetKey(oldList[breakAt]) === resetKey(newList[breakAt])
+  ) {
+    breakAt += 1;
+  }
+  const oldTail = oldList.slice(breakAt);
+  const newTail = newList.slice(breakAt);
+  const newKeys = new Map<string, number>();
+  for (const message of newTail) {
+    const key = resetKey(message);
+    newKeys.set(key, (newKeys.get(key) ?? 0) + 1);
+  }
+  const oldUnmatched: ResetDiffMessage[] = [];
+  const newUnmatched: ResetDiffMessage[] = [];
+  const changes: ContextResetChange[] = [];
+  for (let i = 0; i < Math.min(breakAt, RESET_CHANGE_CAP); i += 1) {
+    changes.push({ status: "kept", role: oldList[i].role });
+  }
+  for (const message of oldTail) {
+    const key = resetKey(message);
+    const remaining = newKeys.get(key) ?? 0;
+    if (remaining > 0) {
+      newKeys.set(key, remaining - 1);
+      changes.push({ status: "kept", role: message.role });
+    } else {
+      oldUnmatched.push(message);
+    }
+  }
+  for (const message of newTail) {
+    const key = resetKey(message);
+    const remaining = newKeys.get(key) ?? 0;
+    if (remaining > 0) {
+      newKeys.set(key, remaining - 1);
+      newUnmatched.push(message);
+    }
+  }
+  // Pair leftover old/new messages of the same role as rewrites.
+  const newByRole = new Map<string, ResetDiffMessage[]>();
+  for (const message of newUnmatched) {
+    const list = newByRole.get(message.role);
+    if (list) list.push(message);
+    else newByRole.set(message.role, [message]);
+  }
+  const rewrittenPairs: Array<[ResetDiffMessage, ResetDiffMessage]> = [];
+  const removedFinal: ResetDiffMessage[] = [];
+  for (const message of oldUnmatched) {
+    const pool = newByRole.get(message.role);
+    if (pool && pool.length > 0) {
+      rewrittenPairs.push([message, pool.shift()!]);
+    } else {
+      removedFinal.push(message);
+    }
+  }
+  const addedFinal = [...newByRole.values()].flat();
+  for (const [oldMsg, newMsg] of rewrittenPairs) {
+    changes.push({
+      status: "rewritten",
+      role: oldMsg.role,
+      oldText: oldMsg.text,
+      newText: newMsg.text,
+    });
+  }
+  for (const message of removedFinal) {
+    changes.push({
+      status: "removed",
+      role: message.role,
+      oldText: message.text,
+    });
+  }
+  for (const message of addedFinal) {
+    changes.push({
+      status: "added",
+      role: message.role,
+      newText: message.text,
+    });
+  }
+  return {
+    breakAt,
+    beforeCount: oldList.length,
+    afterCount: newList.length,
+    beforeChars: oldList.reduce((sum, m) => sum + charsOf(m), 0),
+    afterChars: newList.reduce((sum, m) => sum + charsOf(m), 0),
+    beforeByRole: countByRole(oldList),
+    afterByRole: countByRole(newList),
+    changes: changes.slice(0, RESET_CHANGE_CAP),
+  };
+}
+
 /** One ledger row: a user input, an LLM call, a tool call, or a marker. */
 export interface TrajectoryRecord {
   index: number;
@@ -139,6 +289,8 @@ export interface TrajectoryRecord {
   inputNew?: InputNewMessage[];
   /* context prefix changed before this call (compaction / rewrite) */
   contextReset?: boolean;
+  /* localized detail of that rewrite (breakpoint, sizes, per-message) */
+  resetDetail?: ContextResetDetail;
   outputText?: string;
   thinkingText?: string;
   usage?: UsageInfo;

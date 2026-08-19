@@ -123,6 +123,11 @@ const STRINGS = {
     spanLoadState: "加载状态",
     spanEvidence: "归属证据",
     spanNoActivity: "加载后无归属活动",
+    resetBreakAt: "重置断点",
+    resetSizes: "前后规模",
+    resetMsgs: "条",
+    resetRoles: "role 变化",
+    resetChanges: "逐条变化",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -249,6 +254,11 @@ const STRINGS = {
     spanLoadState: "Load state",
     spanEvidence: "Evidence",
     spanNoActivity: "No attributed activity after load",
+    resetBreakAt: "Breakpoint",
+    resetSizes: "Before → after",
+    resetMsgs: "msgs",
+    resetRoles: "Role changes",
+    resetChanges: "Per-message changes",
   },
 } as const;
 
