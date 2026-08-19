@@ -20,7 +20,7 @@ import {
   type SessionSummary,
   type TraceConfigUi,
 } from "./traceApi";
-import { Inspector } from "./trajectory/Inspector";
+import { Inspector, SpanInspector } from "./trajectory/Inspector";
 import type { RequestSummary } from "./trajectory/Inspector";
 import { Ledger } from "./trajectory/Ledger";
 import {
@@ -161,6 +161,7 @@ export function SessionTraceView({
   const [range, setRange] = useState<TrajectoryTimeRange | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [selectedTurn, setSelectedTurn] = useState<number | null>(null);
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const [collapsedTurns, setCollapsedTurns] = useState<ReadonlySet<number>>(
     new Set(),
   );
@@ -552,6 +553,20 @@ export function SessionTraceView({
     setSelectedTurn(null);
   };
 
+  // Selecting a record supersedes the span view.
+  useEffect(() => {
+    if (selectedIndex !== null) setSelectedSpanId(null);
+  }, [selectedIndex]);
+  const selectedSpan = useMemo(
+    () =>
+      selectedSpanId === null
+        ? null
+        : turns
+            .flatMap((turn) => turn.skillSpans ?? [])
+            .find((span) => span.id === selectedSpanId) ?? null,
+    [selectedSpanId, turns],
+  );
+
   // A deep link to a session without trace data yet (e.g. a brand-new
   // chat) is not an error — the API answers 404; render a friendly
   // empty state instead.
@@ -770,6 +785,7 @@ export function SessionTraceView({
         onRangeChange={setRange}
         onRecordSelect={setSelectedIndex}
         onRecordFocus={setSelectedIndex}
+        onSkillSpanSelect={setSelectedSpanId}
       />
       {detailLoading && !detail ? (
         <div style={{ textAlign: "center", paddingTop: 64 }}>
@@ -838,7 +854,17 @@ export function SessionTraceView({
               initialRecord={initialHeader}
             />
           </div>
-          {showInspector ? (
+          {selectedSpan ? (
+            <SpanInspector
+              span={selectedSpan}
+              records={records}
+              onJumpRecord={(index: number) => {
+                setSelectedSpanId(null);
+                setSelectedIndex(index);
+              }}
+              onClose={() => setSelectedSpanId(null)}
+            />
+          ) : showInspector ? (
             <Inspector
               record={selectedRecord}
               request={requestSummary}

@@ -135,6 +135,7 @@ runtime hooks (6个, PRE_DISPATCH→FINALLY)      AgentScope middleware
 | （本次） | 审批补丁复核修复：包装 `create_pending_summary`（driver gate/harness/computer-use 路径）、`cancel_stale` superseded 事件、cancel_all 逐条落回子会话、身份校验式 restore 防 qwenpaw-pet 互踩、ask-run 映射容量上限；88 测试 |
 | （本次） | 台账可读性：入站报文**合并进 USER 行**（来源渠道/用户/多媒体部件，旧数据降级为可读独立行），出站报文改为一行**回执**（渠道 + 字数，不再重复回复正文） |
 | （本次） | 标记行细分：审批（🛡盾牌/volcano）、回执（📤发送/cyan）、子代理（🚀火箭/geekblue）、提示词（📄文档/green）、错误（⭕红）各有专属标签与图标，不再共用"标记"；Inspector Kind 字段同步 |
+| （v0.3.8） | **技能执行段（SkillSpan）**：开始/结束/归属的段模型落地——`skillSpans.ts` 纯状态机（斜杠/加载/资源三锚点开段，run 边界硬闭合 + 末次归属活动软结束，bypass 段、path/temporal 证据、`skillHue` 确定性配色）；时间线新增**技能色带条带层**（复用四模式投影数学，bypass 虚线橙边，点击开 Span 检查器）；台账归属行加左缘色条；**SpanInspector**（触发依据/起止双标/活动时长/归属步骤/证据跳转）；node 测试 `test-skillspans.js` 挂入构建守卫链（12 例边界矩阵） |
 | （v0.3.6） | **技能归属（时间推断）**：run 内技能激活（斜杠注入/Skill 加载）后的普通工具调用标 `∈技能`（浅蓝，悬停注明依据：斜杠指定=高置信 / 加载后执行=推断），run 结束即清（run/start 亦防御性清空，崩溃缺 run/end 的 run 不泄漏归属）；检查器新增「技能归属」行；与 ⚡（直接触碰技能资源=事实）区分置信度 |
 | （v0.3.5） | **斜杠命令技能通路**：`/skill` 命令把整个 `<skill>` 块内联进 run/start 的 query（第三条披露路径）——前端解析后用户行显示 `/xlsx` 标签、计入请求 pill 的 skillsUsed 与 loadedSkills；后端 `_slash_skill_name` 在两处折叠中聚合进 skills 统计；真实会话实测四处呈现通过 |
 | （v0.3.4） | **第 3 层技能资源归因**：从 header `<agent-skills>` 提取技能目录映射（跨 run 持久），工具调用输入含技能目录路径即标 `⚡技能名`——**已加载后使用（geekblue）vs 未加载直接使用（orange 旁路）**按事件序判定；统计条汇总 `⚡ 未加载即执行`；纯前端零采集改动 |

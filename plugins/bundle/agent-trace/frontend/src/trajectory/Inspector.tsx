@@ -12,6 +12,8 @@ import type * as ReactNS from "react";
 import { storedLocale, t } from "../locale";
 import { collapseContext, diffLines, diffStats } from "./diff";
 import type { TrajectoryRecord } from "./records";
+import { spanDurationMs } from "./skillSpans";
+import type { SkillSpan } from "./skillSpans";
 import {
   estimateTokensFromChars,
   formatEpochMs,
@@ -25,7 +27,7 @@ import { formatBytes } from "../uiShared";
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
 const { useEffect, useRef, useState } = React;
-const { Button, Collapse, Empty, Tabs } = host.antd;
+const { Button, Collapse, Empty, Tabs, Tag } = host.antd;
 const { Text } = host.antd.Typography;
 const { CopyOutlined, CloseOutlined } = host.antdIcons;
 
@@ -1239,6 +1241,160 @@ export function Inspector({
       <div style={{ padding: "8px 12px 0", overflow: "auto" }}>
         <CloseButton onClose={onClose} />
         <Tabs size="small" items={items} tabBarStyle={{ marginBottom: 8 }} />
+      </div>
+    </aside>
+  );
+}
+
+const SPAN_TRIGGER_LABEL: Record<
+  string,
+  "spanTriggerSlash" | "spanTriggerLoad" | "spanTriggerResource"
+> = {
+  slash: "spanTriggerSlash",
+  load: "spanTriggerLoad",
+  resource: "spanTriggerResource",
+};
+
+const SPAN_END_LABEL: Record<
+  string,
+  "spanEndRun" | "spanEndLast" | "spanOpen"
+> = {
+  run_end: "spanEndRun",
+  last_activity: "spanEndLast",
+};
+
+/** Inspector for one skill execution span (opened from timeline bands). */
+export function SpanInspector({
+  span,
+  records,
+  onJumpRecord,
+  onClose,
+}: {
+  span: SkillSpan;
+  records: TrajectoryRecord[];
+  onJumpRecord: (index: number) => void;
+  onClose: () => void;
+}) {
+  const locale = storedLocale();
+  const endLabel = span.endKind
+    ? t(locale, SPAN_END_LABEL[span.endKind])
+    : t(locale, "spanOpen");
+  const durationMs = spanDurationMs(span);
+  const recordByIndex = new Map(records.map((r) => [r.index, r]));
+  return (
+    <aside
+      style={{
+        flexShrink: 0,
+        width: 380,
+        borderLeft: "1px solid rgba(128,128,128,0.18)",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
+        position: "relative",
+        background: "inherit",
+      }}
+    >
+      <div style={{ padding: "8px 12px 0", overflow: "auto" }}>
+        <CloseButton onClose={onClose} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 3,
+              flexShrink: 0,
+              background: `hsl(${span.colorHue}, 65%, 55%)`,
+              border: span.bypass
+                ? "1px dashed rgba(250,140,22,0.9)"
+                : undefined,
+            }}
+          />
+          <Text strong style={{ fontSize: 13 }}>
+            {span.skill}
+          </Text>
+          <Tag
+            color={span.bypass ? "orange" : "geekblue"}
+            style={{ marginInlineEnd: 0, fontSize: 10 }}
+          >
+            {t(locale, SPAN_TRIGGER_LABEL[span.trigger])}
+          </Tag>
+        </div>
+        <div style={{ marginTop: 6 }}>
+          <KeyValue
+            label={t(locale, "spanStart")}
+            value={formatEpochMs(span.startT)}
+          />
+          <KeyValue label={t(locale, "spanEnd")} value={endLabel} />
+          {span.endT !== null ? (
+            <KeyValue label=" " value={formatEpochMs(span.endT)} />
+          ) : null}
+          {span.lastActivityT !== null ? (
+            <KeyValue
+              label={t(locale, "spanLastActivity")}
+              value={formatEpochMs(span.lastActivityT)}
+            />
+          ) : null}
+          <KeyValue
+            label={t(locale, "spanDuration")}
+            value={durationMs === null ? "-" : formatSeconds(durationMs / 1000)}
+          />
+          <KeyValue
+            label={t(locale, "spanAttributed")}
+            value={String(span.attributedIndexes.length)}
+          />
+          <KeyValue
+            label={t(locale, "spanLoadState")}
+            value={
+              span.bypass
+                ? t(locale, "skillBypass")
+                : span.loadSeq !== null
+                ? `seq ${span.loadSeq}`
+                : "-"
+            }
+            danger={span.bypass}
+          />
+        </div>
+        {span.evidences.length > 0 ? (
+          <div style={{ marginTop: 10 }}>
+            <Text strong style={{ fontSize: 12 }}>
+              {t(locale, "spanEvidence")}
+            </Text>
+            {span.evidences.slice(0, 30).map((evidence, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  alignItems: "baseline",
+                  padding: "2px 0",
+                }}
+              >
+                <Tag
+                  color={evidence.kind === "path" ? "geekblue" : "default"}
+                  style={{ marginInlineEnd: 0, fontSize: 10 }}
+                >
+                  {evidence.kind}
+                </Tag>
+                <a
+                  style={{ fontSize: 12 }}
+                  onClick={() => onJumpRecord(evidence.recordIndex)}
+                >
+                  #{evidence.recordIndex}
+                </a>
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  {evidence.detail}
+                </Text>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Text
+            type="secondary"
+            style={{ fontSize: 12, display: "block", marginTop: 10 }}
+          >
+            {t(locale, "spanNoActivity")}
+          </Text>
+        )}
       </div>
     </aside>
   );

@@ -8,6 +8,7 @@
  */
 
 import type { TraceLocale } from "../locale";
+import type { SkillSpan } from "./skillSpans";
 
 export type RecordKind = "user" | "message" | "tool" | "system";
 
@@ -160,6 +161,12 @@ export interface TrajectoryRecord {
   /* why guidedSkill was attributed: explicit slash command vs a Skill
    * tool load earlier in the same run */
   guidedReason?: "slash" | "load";
+  /* execution span this record was attributed to (skillSpans) */
+  skillSpanId?: string;
+  /* hue of that span (ledger left-strip coloring) */
+  skillSpanHue?: number;
+  /* the span was a bypass (resources touched without loading) */
+  skillSpanBypass?: boolean;
   /* pre-truncation output size (from tool/result) */
   toolOutputChars?: number;
   toolOutputBytes?: number;
@@ -197,6 +204,8 @@ export interface TrajectoryTurnModel {
   groups: TrajectoryGroupModel[];
   /** Skill names loaded within this request (from Skill tool calls). */
   skillsUsed?: string[];
+  /** Skill execution spans opened during this request. */
+  skillSpans?: SkillSpan[];
 }
 
 export interface TimelineSpanRange {

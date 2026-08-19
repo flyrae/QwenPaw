@@ -191,6 +191,14 @@ function RecordRow({
         cursor: "pointer",
         background: selected ? "rgba(22,119,255,0.08)" : undefined,
         opacity: dimmed ? 0.35 : 1,
+        borderLeft:
+          record.skillSpanHue !== undefined
+            ? `3px solid ${
+                record.skillSpanBypass
+                  ? "rgba(250,140,22,0.9)"
+                  : `hsl(${record.skillSpanHue}, 65%, 55%)`
+              }`
+            : "3px solid transparent",
       }}
     >
       <span

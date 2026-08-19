@@ -19,11 +19,13 @@ import type {
 } from "./records";
 import { formatEpochMs } from "./records";
 import {
+  deriveSkillBands,
   deriveTrajectoryTimeline,
   formatTimelineOffset,
   type TrajectoryTimelineMode,
   type TrajectoryTimeRange,
 } from "./timeline";
+import { storedLocale, t } from "../locale";
 
 ensureTimelineStyles();
 
@@ -153,6 +155,8 @@ export interface TimelineBarProps {
   onRecordSelect?: (index: number) => void;
   /** Bring the nearest record into view after clicking whitespace. */
   onRecordFocus?: (index: number) => void;
+  /** Open the inspector for a clicked skill band. */
+  onSkillSpanSelect?: (spanId: string) => void;
 }
 
 function orderedRange(left: number, right: number): FractionRange {
@@ -283,11 +287,16 @@ export const TimelineBar = React.memo(function TimelineBar({
   onRangeChange,
   onRecordSelect,
   onRecordFocus,
+  onSkillSpanSelect,
 }: TimelineBarProps) {
   const hostTheme =
     typeof host.useTheme === "function" ? host.useTheme() : undefined;
   const model = useMemo(
     () => deriveTrajectoryTimeline(turns, mode),
+    [mode, turns],
+  );
+  const skillBands = useMemo(
+    () => deriveSkillBands(turns, mode),
     [mode, turns],
   );
   const detailByIndex = useMemo(
@@ -765,6 +774,60 @@ export const TimelineBar = React.memo(function TimelineBar({
                 }
               />
             </>
+          )}
+          {skillBands !== null && model !== null && (
+            <div
+              aria-label="Skill bands"
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 2,
+                height: 6,
+                pointerEvents: "none",
+                zIndex: 3,
+              }}
+            >
+              {skillBands.map((band) => {
+                const left = (band.start - model.start) / fullDuration;
+                const width = Math.max(
+                  (band.end - band.start) / fullDuration,
+                  0.004,
+                );
+                const locale = storedLocale();
+                const title = `${band.bypass ? "⚠ " : ""}${band.skill} · ${
+                  band.trigger
+                }${band.open ? ` · ${t(locale, "spanOpen")}` : ""}`;
+                return (
+                  <span
+                    key={band.spanId}
+                    title={title}
+                    onClick={
+                      onSkillSpanSelect
+                        ? (event) => {
+                            event.stopPropagation();
+                            onSkillSpanSelect(band.spanId);
+                          }
+                        : undefined
+                    }
+                    style={{
+                      position: "absolute",
+                      left: `${Math.max(0, left) * 100}%`,
+                      width: `${width * 100}%`,
+                      top: 0,
+                      bottom: 0,
+                      borderRadius: 3,
+                      background: `hsla(${band.hue}, 65%, 55%, 0.55)`,
+                      border: band.bypass
+                        ? "1px dashed rgba(250,140,22,0.9)"
+                        : `1px solid hsla(${band.hue}, 55%, 45%, 0.8)`,
+                      pointerEvents: onSkillSpanSelect ? "auto" : "none",
+                      cursor: onSkillSpanSelect ? "pointer" : "default",
+                    }}
+                  />
+                );
+              })}
+            </div>
           )}
           <div
             className={css.turnBoundaries}

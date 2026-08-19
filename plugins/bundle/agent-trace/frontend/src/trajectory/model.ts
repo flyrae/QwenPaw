@@ -17,6 +17,7 @@ import type {
   UsageInfo,
 } from "./records";
 import { epochMs } from "./records";
+import { SkillSpanTracker } from "./skillSpans";
 
 interface PendingCell {
   cell: TrajectoryRecord;
@@ -143,6 +144,10 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   // with why — used for temporal "guided by" attribution of ordinary
   // tool calls. Cleared when the run ends.
   const activeRunSkills: Array<[string, "slash" | "load"]> = [];
+  // Skill execution spans: start/end anchors + attribution evidence
+  // (design: DESIGN.md 技能执行段). turnOfSpan maps spans to their run.
+  const spanTracker = new SkillSpanTracker();
+  const spanTurns = new Map<string, TrajectoryTurnModel>();
   let index = 0;
   let runNumber = 0;
 
@@ -228,6 +233,13 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         if (slashSkill) {
           loadedSkills.add(slashSkill);
           activeRunSkills.push([slashSkill, "slash"]);
+          spanTracker.onRunStart();
+          spanTracker.onSlashSkill(
+            slashSkill,
+            event.seq,
+            epochMs(event.t) ?? 0,
+          );
+          spanTurns.set(`${slashSkill}#${event.seq}`, turn);
         }
         const userCell: TrajectoryRecord = {
           index: ++index,
@@ -237,7 +249,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           text: firstLine(query) || firstLine(messages.at(-1)?.text),
           messages,
           timeSeconds: 0,
-          startedAt: epochMs(event.t),
+          startedAt: epochMs(event.t) ?? 0,
           isError: false,
           running: false,
           skillName: slashSkill ?? undefined,
@@ -251,6 +263,8 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         const turn = turnByRun.get(event.run_id);
         if (openRunId === event.run_id) openRunId = "";
         activeRunSkills.length = 0;
+        // Spans cannot outlive their run: hard-close everything.
+        spanTracker.onRunEnd(event.seq, epochMs(event.t) ?? 0);
         channelByRun.delete(event.run_id);
         userCellByRun.delete(event.run_id);
         const status = String(data.status ?? "unknown");
@@ -280,7 +294,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
               typeof data.duration_ms === "number"
                 ? data.duration_ms / 1000
                 : null,
-            startedAt: epochMs(event.t),
+            startedAt: epochMs(event.t) ?? 0,
             isError: true,
             running: false,
             raw: [event as unknown as Record<string, unknown>],
@@ -303,7 +317,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           markerKind: "spawn",
           text: `${childAgent} → ${childSession ?? "?"}`,
           timeSeconds: 0,
-          startedAt: epochMs(event.t),
+          startedAt: epochMs(event.t) ?? 0,
           isError: false,
           running: false,
           spawnSession: childSession,
@@ -357,7 +371,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
             kind: "user",
             text: textFromParts || "📥",
             timeSeconds: 0,
-            startedAt: epochMs(event.t),
+            startedAt: epochMs(event.t) ?? 0,
             isError: false,
             running: false,
             channel: channel || undefined,
@@ -381,7 +395,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           markerKind: "receipt",
           text: "📤",
           timeSeconds: 0,
-          startedAt: epochMs(event.t),
+          startedAt: epochMs(event.t) ?? 0,
           isError: false,
           running: false,
           outputText: text2 || undefined,
@@ -402,7 +416,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           markerKind: "approval",
           text: String(data.tool_name ?? "?"),
           timeSeconds: 0,
-          startedAt: epochMs(event.t),
+          startedAt: epochMs(event.t) ?? 0,
           isError: false,
           running: false,
           raw: [event as unknown as Record<string, unknown>],
@@ -420,7 +434,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           markerKind: "approval",
           text: tool ? `${tool} → ${decision}` : decision,
           timeSeconds: 0,
-          startedAt: epochMs(event.t),
+          startedAt: epochMs(event.t) ?? 0,
           isError: decision === "denied",
           running: false,
           raw: [event as unknown as Record<string, unknown>],
@@ -451,7 +465,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
                 }`
               : `⚙ System Prompt updated`,
           timeSeconds: 0,
-          startedAt: epochMs(event.t),
+          startedAt: epochMs(event.t) ?? 0,
           isError: false,
           running: false,
           prompt,
@@ -506,7 +520,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           kind: "message",
           text: "…",
           timeSeconds: null,
-          startedAt: epochMs(event.t),
+          startedAt: epochMs(event.t) ?? 0,
           isError: false,
           running: true,
           model: String(callData.model ?? "unknown"),
@@ -573,7 +587,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
             runIndex: 0,
             runId: event.run_id,
             kind: "message",
-            startedAt: epochMs(event.t),
+            startedAt: epochMs(event.t) ?? 0,
             model: String(data.model ?? callData.model ?? "unknown"),
             ...fill,
           });
@@ -588,6 +602,13 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         if (skillName) {
           loadedSkills.add(skillName);
           activeRunSkills.push([skillName, "load"]);
+          const loadSpanId = spanTracker.onSkillLoad(
+            skillName,
+            event.seq,
+            epochMs(event.t) ?? 0,
+          );
+          const turn = turnByRun.get(event.run_id);
+          if (turn) spanTurns.set(loadSpanId, turn);
         }
         const toolInputText = callData.input
           ? String(callData.input)
@@ -614,6 +635,28 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           guidedSkill = name;
           guidedReason = reason;
         }
+        // Feed the span tracker: path evidence first, temporal second.
+        const spanId = spanTracker.onToolCall({
+          attribution: inSkill
+            ? { skill: inSkill, kind: "path", detail: "skill dir in input" }
+            : guidedSkill
+            ? {
+                skill: guidedSkill,
+                kind: "temporal",
+                detail:
+                  guidedReason === "slash"
+                    ? "after slash invocation"
+                    : "after skill load",
+              }
+            : null,
+          recordIndex: index + 1,
+          seq: event.seq,
+          t: epochMs(event.t) ?? 0,
+        });
+        if (spanId && !spanTurns.has(spanId)) {
+          const turn = turnByRun.get(event.run_id);
+          if (turn) spanTurns.set(spanId, turn);
+        }
         const cell: TrajectoryRecord = {
           index: ++index,
           runIndex: 0,
@@ -623,7 +666,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
             ? `📚 ${skillName}`
             : `${toolName}(${firstLine(String(callData.input ?? ""), 60)})`,
           timeSeconds: null,
-          startedAt: epochMs(event.t),
+          startedAt: epochMs(event.t) ?? 0,
           isError: false,
           running: true,
           toolName,
@@ -632,6 +675,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           inSkillLoaded: inSkill ? loadedSkills.has(inSkill) : undefined,
           guidedSkill,
           guidedReason,
+          skillSpanId: spanId ?? undefined,
           toolInput: callData.input ? String(callData.input) : undefined,
         };
         appendCell(event.run_id, cell);
@@ -698,7 +742,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
             runId: event.run_id,
             kind: "tool",
             text: `?${outputPreview}`,
-            startedAt: epochMs(event.t),
+            startedAt: epochMs(event.t) ?? 0,
             ...fill,
           });
         }
@@ -728,6 +772,29 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
       }
     }
     if (names.length > 0) turn.skillsUsed = names;
+  }
+
+  // Attach skill execution spans to their runs' turns, and stamp the
+  // attributed records with the span hue for the ledger color strip.
+  const cellByIndex = new Map<number, TrajectoryRecord>();
+  for (const turn of turns) {
+    for (const group of turn.groups) {
+      for (const cell of group.cells) cellByIndex.set(cell.index, cell);
+    }
+  }
+  for (const span of spanTracker.spans()) {
+    const turn = spanTurns.get(span.id);
+    if (turn) {
+      (turn.skillSpans ??= []).push(span);
+    }
+    for (const recordIndex of span.attributedIndexes) {
+      const cell = cellByIndex.get(recordIndex);
+      if (cell) {
+        cell.skillSpanId = span.id;
+        cell.skillSpanHue = span.colorHue;
+        cell.skillSpanBypass = span.bypass;
+      }
+    }
   }
 
   return turns;
