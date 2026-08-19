@@ -155,6 +155,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   // Content-match index per skill, built from loaded SKILL.md bodies
   // (the Skill tool result text) — WP4 attribution evidence.
   const skillFeatures = new Map<string, string[]>();
+  const skillShaBySkill = new Map<string, string>();
   let index = 0;
   let runNumber = 0;
 
@@ -233,7 +234,10 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         // Slash-command skill invocation inlines the whole <skill> block
         // into the query (a third disclosure path, next to the Skill
         // tool and raw file access).
-        let slashSkill = matchSlashSkill(query);
+        let slashSkill =
+          typeof data.slash_skill === "string" && data.slash_skill
+            ? data.slash_skill
+            : matchSlashSkill(query);
         if (!slashSkill && messages.length > 0) {
           slashSkill = matchSlashSkill(String(messages[0]?.text ?? ""));
         }
@@ -623,7 +627,16 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         // Layer 3: does this call touch a skill's resources (scripts,
         // references — the skill dir path appears in the input)?
         let inSkill: string | undefined;
-        if (!skillName && toolInputText && skillDirs.length > 0) {
+        if (!skillName && toolInputText) {
+          const captured =
+            typeof callData.skill_resource === "string"
+              ? callData.skill_resource
+              : undefined;
+          if (captured) {
+            inSkill = captured;
+          }
+        }
+        if (!skillName && !inSkill && toolInputText && skillDirs.length > 0) {
           const normalizedInput = normalizeSkillPath(toolInputText);
           for (const [dir, name] of skillDirs) {
             if (normalizedInput.includes(dir)) {
@@ -758,12 +771,25 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           if (!pending.cell.skillName) {
             pending.cell.text = `${pending.cell.text}${outputPreview}`;
           } else if (output) {
-            // WP4: index the loaded SKILL.md body for content matching
-            // (rebuild on every load — the skill may have been edited).
-            skillFeatures.set(
-              pending.cell.skillName,
-              buildSkillFeatures(output),
-            );
+            // WP4: index the loaded SKILL.md body for content matching.
+            // With a captured skill_sha (WP5), skip the rebuild when the
+            // body is unchanged since the previous load.
+            const skillSha =
+              typeof data.skill_sha === "string" ? data.skill_sha : null;
+            if (
+              !(
+                skillSha &&
+                skillShaBySkill.get(pending.cell.skillName) === skillSha
+              )
+            ) {
+              skillFeatures.set(
+                pending.cell.skillName,
+                buildSkillFeatures(output),
+              );
+              if (skillSha) {
+                skillShaBySkill.set(pending.cell.skillName, skillSha);
+              }
+            }
           }
           pending.cell.raw = [
             ...(pending.call

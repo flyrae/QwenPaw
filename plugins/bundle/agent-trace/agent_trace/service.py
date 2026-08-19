@@ -61,6 +61,9 @@ class TraceService:
         # (how tool results enter the model input stays observable
         # without re-storing the whole context every call).
         self._llm_input_fingerprints: dict = {}
+        # Skill dir map per session (from the <agent-skills> prompt
+        # section), used to tag tool/call events with skill_resource.
+        self._skill_dirs_by_session: dict = {}
 
     @property
     def enabled(self) -> bool:
@@ -112,6 +115,14 @@ class TraceService:
             return common, False
         return 0, True
 
+    def set_skill_dirs(self, session_id: str, dirs: list) -> None:
+        """Cache the session's skill-dir map parsed from the prompt."""
+        self._skill_dirs_by_session[session_id] = dirs
+
+    def skill_dirs(self, session_id: str) -> list:
+        """Cached skill-dir map (possibly empty, never None)."""
+        return self._skill_dirs_by_session.get(session_id) or []
+
     def invalidate_patterns(self) -> None:
         """Recompile redaction patterns after a config change."""
         self._patterns = None
@@ -149,6 +160,7 @@ class TraceService:
         for session_id in removed:
             self._header_sha_by_session.pop(session_id, None)
             self._llm_input_fingerprints.pop(session_id, None)
+            self._skill_dirs_by_session.pop(session_id, None)
         if removed:
             logger.info(
                 "agent-trace: retention cleanup removed %d session "
@@ -271,6 +283,7 @@ class TraceService:
         if deleted:
             self._header_sha_by_session.pop(session_id, None)
             self._llm_input_fingerprints.pop(session_id, None)
+            self._skill_dirs_by_session.pop(session_id, None)
         return deleted
 
     def save_config(self) -> None:
