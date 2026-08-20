@@ -1013,12 +1013,36 @@ export function Inspector({
     selected.marker ||
     (selected.toolCalls && selected.toolCalls.length > 0)
   ) {
-    if (selected.inputNew && selected.inputNew.length > 0) {
+    // Input tab renders even when the delta is empty (no-change calls)
+    // or when only messagesMeta is available — the kind of delta is
+    // shown explicitly instead of silently hiding the tab.
+    if (selected.inputNew || selected.messagesMeta) {
+      const deltaCount = selected.inputNew?.length ?? 0;
+      const totalCount = selected.messagesMeta?.count ?? 0;
+      let deltaKind: string;
+      if (selected.contextReset) {
+        deltaKind = `${t(locale, "deltaReset")} (${totalCount})`;
+      } else if (deltaCount === 0) {
+        deltaKind = t(locale, "deltaNoChange");
+      } else if (
+        selected.inputNew &&
+        selected.inputNew.length === 1 &&
+        selected.inputNew[0].role === "assistant" &&
+        totalCount > 1
+      ) {
+        deltaKind = t(locale, "deltaTailUpdate");
+      } else {
+        deltaKind = `${t(locale, "deltaAppend")} (${deltaCount})`;
+      }
       items.push({
         key: "input",
         label: t(locale, "inputTab"),
         children: (
           <div style={{ display: "grid", gap: 8 }}>
+            <KeyValue
+              label={t(locale, "deltaKind")}
+              value={deltaKind}
+            />
             {selected.contextReset ? (
               <Text type="warning" style={{ fontSize: 12 }}>
                 {t(locale, "contextReset")}
@@ -1145,32 +1169,42 @@ export function Inspector({
                 )} ${t(locale, "charUnit")}`}
               />
             ) : null}
-            {selected.inputNew.length > 0 ? (
-              <Collapse
-                size="small"
-                defaultActiveKey={
-                  selected.inputNew.length <= 5 ? ["messages"] : []
-                }
-                items={[
-                  {
-                    key: "messages",
-                    label: `${t(locale, "inputMessages")} (${
-                      selected.inputNew.length
-                    })`,
-                    children: (
-                      <div style={{ display: "grid", gap: 8 }}>
-                        {selected.inputNew.map((message, index) => (
-                          <InputMessageItem
-                            key={index}
-                            message={message}
-                            locale={locale}
-                          />
-                        ))}
-                      </div>
-                    ),
-                  },
-                ]}
-              />
+            {selected.inputNew && selected.inputNew.length > 0 ? (
+              <>
+                {selected.inputNew.some((m) => m.role === "assistant") ? (
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: 11, display: "block" }}
+                  >
+                    {t(locale, "assistantInputNote")}
+                  </Text>
+                ) : null}
+                <Collapse
+                  size="small"
+                  defaultActiveKey={
+                    selected.inputNew.length <= 5 ? ["messages"] : []
+                  }
+                  items={[
+                    {
+                      key: "messages",
+                      label: `${t(locale, "inputMessages")} (${
+                        selected.inputNew.length
+                      })`,
+                      children: (
+                        <div style={{ display: "grid", gap: 8 }}>
+                          {selected.inputNew.map((message, index) => (
+                            <InputMessageItem
+                              key={index}
+                              message={message}
+                              locale={locale}
+                            />
+                          ))}
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              </>
             ) : null}
           </div>
         ),
