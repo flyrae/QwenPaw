@@ -125,6 +125,8 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   const turns: TrajectoryTurnModel[] = [];
   const turnByRun = new Map<string, TrajectoryTurnModel>();
   const pendingLlm = new Map<string, PendingCell[]>();
+  // Last completed LLM cell per run — for attaching api_request/response
+  const lastLlmCellByRun = new Map<string, TrajectoryRecord>();
   const pendingTool = new Map<string, PendingCell[]>();
   const orphanCells = new Map<string, TrajectoryRecord[]>();
   // Cells recorded before any run opened (empty run_id) — attached
@@ -615,6 +617,58 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         pendingLlm.set(event.run_id, list);
         break;
       }
+      case "llm/api_request": {
+        // Attach the wire-level formatted messages to the pending
+        // (or most recent) LLM call cell for the API payload tab.
+        const list = pendingLlm.get(event.run_id);
+        const target =
+          list && list.length > 0
+            ? list[list.length - 1].cell
+            : lastLlmCellByRun.get(event.run_id);
+        if (target) {
+          const msgs = Array.isArray(data.messages)
+            ? (data.messages as Record<string, unknown>[])
+            : [];
+          target.apiPayload = {
+            model: String(data.model ?? "unknown"),
+            messages: msgs.map((m) => ({
+              role: String(m.role ?? "?"),
+              content:
+                typeof m.content === "string"
+                  ? m.content
+                  : JSON.stringify(m.content ?? ""),
+              toolCallId:
+                typeof m.tool_call_id === "string" ? m.tool_call_id : undefined,
+            })),
+            params:
+              data.params && typeof data.params === "object"
+                ? (data.params as Record<string, unknown>)
+                : undefined,
+            durationMs:
+              typeof data.duration_ms === "number"
+                ? data.duration_ms
+                : undefined,
+          };
+          target.raw = [
+            ...(target.raw ?? []),
+            event as unknown as Record<string, unknown>,
+          ];
+        }
+        break;
+      }
+      case "llm/api_response": {
+        // Attach usage/timing from the API response to the cell.
+        const target = lastLlmCellByRun.get(event.run_id);
+        if (target && target.apiPayload) {
+          if (data.usage && typeof data.usage === "object") {
+            target.apiPayload.usage = data.usage as Record<string, number>;
+          }
+          if (typeof data.duration_ms === "number") {
+            target.apiPayload.durationMs = data.duration_ms;
+          }
+        }
+        break;
+      }
       case "llm/result": {
         const list = pendingLlm.get(event.run_id);
         const pending = list?.shift();
@@ -648,6 +702,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
         };
         if (pending) {
           Object.assign(pending.cell, fill);
+          lastLlmCellByRun.set(event.run_id, pending.cell);
           pending.cell.model = String(
             data.model ?? callData.model ?? pending.cell.model,
           );

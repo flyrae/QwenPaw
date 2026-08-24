@@ -1039,10 +1039,7 @@ export function Inspector({
         label: t(locale, "inputTab"),
         children: (
           <div style={{ display: "grid", gap: 8 }}>
-            <KeyValue
-              label={t(locale, "deltaKind")}
-              value={deltaKind}
-            />
+            <KeyValue label={t(locale, "deltaKind")} value={deltaKind} />
             {selected.contextReset ? (
               <Text type="warning" style={{ fontSize: 12 }}>
                 {t(locale, "contextReset")}
@@ -1206,6 +1203,100 @@ export function Inspector({
                 />
               </>
             ) : null}
+          </div>
+        ),
+      });
+    }
+    // Wire-level API payload tab (from llm/api_request events)
+    if (selected.apiPayload && selected.apiPayload.messages.length > 0) {
+      const ap = selected.apiPayload;
+      items.push({
+        key: "api",
+        label: "API",
+        children: (
+          <div style={{ display: "grid", gap: 8 }}>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {t(locale, "apiPayloadNote")}
+            </Text>
+            <KeyValue label="Model" value={ap.model} />
+            <KeyValue
+              label={t(locale, "apiMsgCount")}
+              value={String(ap.messages.length)}
+            />
+            {ap.usage ? (
+              <KeyValue
+                label="Usage"
+                value={`in ${ap.usage.input_tokens ?? 0} · out ${
+                  ap.usage.output_tokens ?? 0
+                } tok`}
+              />
+            ) : null}
+            {ap.durationMs !== undefined ? (
+              <KeyValue
+                label={t(locale, "duration")}
+                value={formatSeconds(ap.durationMs / 1000)}
+              />
+            ) : null}
+            <Collapse
+              size="small"
+              items={[
+                {
+                  key: "api-msgs",
+                  label: `${t(locale, "apiMessages")} (${ap.messages.length})`,
+                  children: (
+                    <div style={{ display: "grid", gap: 4 }}>
+                      {ap.messages.map((m, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            gap: 6,
+                            alignItems: "baseline",
+                          }}
+                        >
+                          <Tag
+                            color={
+                              m.role === "tool"
+                                ? "gold"
+                                : m.role === "system"
+                                ? "green"
+                                : m.role === "user"
+                                ? "blue"
+                                : "purple"
+                            }
+                            style={{
+                              marginInlineEnd: 0,
+                              fontSize: 9,
+                              lineHeight: "14px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {m.role}
+                          </Tag>
+                          {m.toolCallId ? (
+                            <Text code style={{ fontSize: 9, flexShrink: 0 }}>
+                              {m.toolCallId.slice(-8)}
+                            </Text>
+                          ) : null}
+                          <Text
+                            type="secondary"
+                            style={{
+                              fontSize: 11,
+                              minWidth: 0,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {m.content.slice(0, 80)}
+                          </Text>
+                        </div>
+                      ))}
+                    </div>
+                  ),
+                },
+              ]}
+            />
           </div>
         ),
       });

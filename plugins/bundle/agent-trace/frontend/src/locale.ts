@@ -94,11 +94,16 @@ const STRINGS = {
     estimateNote: "字符→token 按模型系数估算，仅供参考",
     realInputTokens: "输入 token（实测）",
     deltaKind: "增量类型",
+    apiPayloadNote:
+      "OpenAI SDK 层拦截的实际 API 消息（formatter 之后，含 role=tool 结果）",
+    apiMsgCount: "API 消息数",
+    apiMessages: "API 消息",
     deltaReset: "全量重记",
     deltaNoChange: "无变化（与上次调用相同）",
     deltaTailUpdate: "末条更新（运行时改写模型自己的尾随叙述）",
     deltaAppend: "新增",
-    assistantInputNote: "assistant 角色的输入消息 = 模型自己先前的回复，随上下文进入下一次调用",
+    assistantInputNote:
+      "assistant 角色的输入消息 = 模型自己先前的回复，随上下文进入下一次调用",
     compositionNote:
       "桶按消息字符占比呈现；实测 token 为计费口径总量（含带外工具结果）",
     maxToolMsg: "最大单条工具消息",
@@ -252,11 +257,17 @@ const STRINGS = {
     estimateNote: "chars→tokens uses a per-model ratio — estimates only",
     realInputTokens: "Input tokens (measured)",
     deltaKind: "Delta kind",
+    apiPayloadNote:
+      "Actual API messages intercepted at the OpenAI SDK layer (post-formatter, includes role=tool results)",
+    apiMsgCount: "API message count",
+    apiMessages: "API messages",
     deltaReset: "Full re-record",
     deltaNoChange: "No change (identical to the previous call)",
-    deltaTailUpdate: "Tail update (runtime rewrote the model's trailing narration)",
+    deltaTailUpdate:
+      "Tail update (runtime rewrote the model's trailing narration)",
     deltaAppend: "Appended",
-    assistantInputNote: "assistant-role input messages are the model's own prior replies, re-entering context for the next call",
+    assistantInputNote:
+      "assistant-role input messages are the model's own prior replies, re-entering context for the next call",
     compositionNote:
       "buckets show message char shares; measured tokens are the billed total (out-of-band tool results included)",
     maxToolMsg: "Largest tool message",

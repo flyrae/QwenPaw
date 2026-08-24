@@ -261,6 +261,26 @@ export function diffContextReset(
   };
 }
 
+/**
+ * Wire-level API payload captured by the openai SDK interception
+ * (llm/api_request + llm/api_response events). These are the
+ * FORMATTED messages after the provider formatter has run — the
+ * actual dicts sent over the wire, including role=tool results.
+ */
+export interface ApiPayloadMessage {
+  role: string;
+  content: string;
+  toolCallId?: string;
+}
+
+export interface ApiPayload {
+  model: string;
+  messages: ApiPayloadMessage[];
+  params?: Record<string, unknown>;
+  usage?: Record<string, number>;
+  durationMs?: number;
+}
+
 /** One ledger row: a user input, an LLM call, a tool call, or a marker. */
 export interface TrajectoryRecord {
   index: number;
@@ -291,6 +311,8 @@ export interface TrajectoryRecord {
   contextReset?: boolean;
   /* localized detail of that rewrite (breakpoint, sizes, per-message) */
   resetDetail?: ContextResetDetail;
+  /* wire-level API payload (from llm/api_request/response events) */
+  apiPayload?: ApiPayload;
   outputText?: string;
   thinkingText?: string;
   usage?: UsageInfo;
