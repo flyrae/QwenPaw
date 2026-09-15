@@ -12,7 +12,7 @@
     "backend": "plugin.py",
     "frontend": "dist/index.js"
   },
-  "dependencies": [],
+  "dependencies": ["wrapt>=1.14"],
   "qwenpaw_version": {
     "min": "2.1.0",
     "max": "2.2.0"
