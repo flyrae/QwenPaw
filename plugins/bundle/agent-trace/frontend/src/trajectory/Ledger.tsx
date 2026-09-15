@@ -162,12 +162,14 @@ function RecordRow({
   dimmed,
   multiRequest,
   onSelect,
+  onOpenRun,
 }: {
   record: TrajectoryRecord;
   selected: boolean;
   dimmed: boolean;
   multiRequest: boolean;
   onSelect: () => void;
+  onOpenRun?: (runIndex: number) => void;
 }) {
   const usage = record.usage;
   const tokens =
@@ -176,6 +178,32 @@ function RecordRow({
           usage.output_tokens,
         )}`
       : null;
+  // dsh parity: reasoning tokens as a third inline metric, purple and
+  // tooltip-documented (Input N · Cached N · Output N (Reasoning N)).
+  const reasoning =
+    usage && usage.reasoning_tokens ? usage.reasoning_tokens : null;
+  const tokenTitle =
+    usage && tokens
+      ? [
+          `Input ${formatTokens(usage.input_tokens)} tok`,
+          usage.cache_input_tokens
+            ? `Cached ${formatTokens(usage.cache_input_tokens)} tok`
+            : null,
+          usage.cache_creation_input_tokens
+            ? `Cache created ${formatTokens(
+                usage.cache_creation_input_tokens,
+              )} tok`
+            : null,
+          `Output ${formatTokens(usage.output_tokens)} tok`,
+          reasoning
+            ? `${t(storedLocale(), "reasoningShort")} ${formatTokens(
+                reasoning,
+              )} tok`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : undefined;
   return (
     <div
       className="at-ledger-row"
@@ -212,11 +240,28 @@ function RecordRow({
           textAlign: "right",
         }}
       >
-        {multiRequest && (
+        {multiRequest && onOpenRun ? (
+          <span
+            title={t(storedLocale(), "runViewHint")}
+            onClick={(event: ReactNS.MouseEvent<HTMLSpanElement>) => {
+              event.stopPropagation();
+              onOpenRun(record.runIndex);
+            }}
+            style={{
+              opacity: 0.75,
+              marginRight: 3,
+              cursor: "pointer",
+              textDecoration: "underline dotted",
+              textUnderlineOffset: 2,
+            }}
+          >
+            R{record.runIndex}
+          </span>
+        ) : multiRequest ? (
           <span style={{ opacity: 0.65, marginRight: 3 }}>
             R{record.runIndex}
           </span>
-        )}
+        ) : null}
         #{record.index}
       </span>
       <Tag
@@ -403,7 +448,16 @@ function RecordRow({
           textAlign: "right",
         }}
       >
-        {tokens ? <span style={{ color: "#1677ff" }}>{tokens}</span> : null}
+        {tokens ? (
+          <span title={tokenTitle}>
+            <span style={{ color: "#1677ff" }}>{tokens}</span>
+            {reasoning ? (
+              <span style={{ color: "#722ed1" }}>
+                {` · ${formatTokens(reasoning)}`}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         {tokens ? " · " : ""}
         {(record.kind === "message" || record.kind === "tool") &&
           formatSeconds(record.timeSeconds)}
@@ -649,6 +703,7 @@ export function Ledger({
             dimmed={dimFor(record)}
             multiRequest={multiRequest}
             onSelect={() => onSelectedIndexChange(record.index)}
+            onOpenRun={onSelectedTurnChange}
           />
         );
       }
@@ -682,6 +737,7 @@ export function Ledger({
             dimmed={dimFor(record)}
             multiRequest={multiRequest}
             onSelect={() => onSelectedIndexChange(record.index)}
+            onOpenRun={onSelectedTurnChange}
           />
         );
       }

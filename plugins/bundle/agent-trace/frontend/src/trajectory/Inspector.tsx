@@ -389,22 +389,25 @@ function RequestInspector({
   const [tab, setTab] = React.useState("summary");
   const timingRows = (
     <div>
-      <KeyValue label="Started" value={formatEpochMs(request.startedAt)} />
       <KeyValue
-        label="Total"
+        label={t(locale, "startedAt")}
+        value={formatEpochMs(request.startedAt)}
+      />
+      <KeyValue
+        label={t(locale, "duration")}
         value={formatSeconds(
           request.durationMs === null ? null : request.durationMs / 1000,
         )}
       />
       {request.ttftMs !== null ? (
         <KeyValue
-          label="First TTFT"
+          label={t(locale, "ttftLabel")}
           value={formatSeconds(request.ttftMs / 1000)}
         />
       ) : null}
       {request.decodeMs !== null ? (
         <KeyValue
-          label="Total decoding"
+          label={t(locale, "decodeLabel")}
           value={formatSeconds(request.decodeMs / 1000)}
         />
       ) : null}
@@ -439,6 +442,9 @@ function RequestInspector({
             danger={request.status === "error"}
           />
           <KeyValue label="Query" value={firstLineOf(request.query)} />
+          {request.providers.length > 0 ? (
+            <KeyValue label="Provider" value={request.providers.join(" · ")} />
+          ) : null}
           <KeyValue
             label={t(locale, "model")}
             value={request.models.join(", ") || "-"}
@@ -981,6 +987,126 @@ export function Inspector({
       </div>
     ),
   });
+  // Request tab (dsh request-view parity): one place for the call's
+  // provider, generation options, token breakdown, timing, and the
+  // tool calls this response emitted.
+  if (
+    selected.kind === "message" &&
+    (selected.usage ||
+      selected.timing ||
+      selected.options ||
+      selected.apiPayload?.params ||
+      (selected.toolCalls && selected.toolCalls.length > 0))
+  ) {
+    const wireParams = selected.apiPayload?.params;
+    const hasBothOptions =
+      wireParams !== undefined && selected.options !== undefined;
+    items.push({
+      key: "request",
+      label: t(locale, "requestTab"),
+      children: (
+        <div style={{ display: "grid", gap: 8 }}>
+          {selected.toolCalls && selected.toolCalls.length > 0 ? (
+            <div>
+              <Text strong style={{ fontSize: 12 }}>
+                {t(locale, "toolCallsEmitted")} ({selected.toolCalls.length})
+              </Text>
+              {selected.toolCalls.map((call, i) => (
+                <div
+                  key={call.id || i}
+                  style={{ display: "flex", gap: 6, alignItems: "baseline" }}
+                >
+                  <Text code style={{ fontSize: 11, flexShrink: 0 }}>
+                    {call.name}
+                  </Text>
+                  {call.id ? (
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: 10, flexShrink: 0 }}
+                    >
+                      …{call.id.slice(-8)}
+                    </Text>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {wireParams || selected.options ? (
+            <div>
+              <Text strong style={{ fontSize: 12 }}>
+                {t(locale, "generationOptions")}
+              </Text>
+              {hasBothOptions ? (
+                <Text
+                  type="secondary"
+                  style={{ fontSize: 11, display: "block" }}
+                >
+                  {`${t(locale, "wireParams")} + ${t(
+                    locale,
+                    "callOptionsDigest",
+                  )}`}
+                </Text>
+              ) : null}
+              <Pre
+                value={{ ...(selected.options ?? {}), ...(wireParams ?? {}) }}
+                json
+              />
+            </div>
+          ) : null}
+          {selected.usage ? (
+            <div>
+              <Text strong style={{ fontSize: 12 }}>
+                {t(locale, "usage")}
+              </Text>
+              <UsageBreakdown
+                input={selected.usage.input_tokens ?? 0}
+                output={selected.usage.output_tokens ?? 0}
+                cacheRead={selected.usage.cache_input_tokens ?? 0}
+                cacheWrite={selected.usage.cache_creation_input_tokens ?? 0}
+                reasoning={selected.usage.reasoning_tokens ?? 0}
+              />
+            </div>
+          ) : null}
+          <div>
+            <Text strong style={{ fontSize: 12 }}>
+              {t(locale, "timing")}
+            </Text>
+            <KeyValue
+              label={t(locale, "startedAt")}
+              value={formatEpochMs(selected.startedAt)}
+            />
+            <KeyValue
+              label={t(locale, "duration")}
+              value={formatSeconds(selected.timeSeconds)}
+            />
+            {selected.timing ? (
+              <>
+                <KeyValue
+                  label={t(locale, "ttftLabel")}
+                  value={formatSeconds(selected.timing.ttft_ms / 1000)}
+                />
+                <KeyValue
+                  label={t(locale, "decodeLabel")}
+                  value={formatSeconds(selected.timing.decode_ms / 1000)}
+                />
+                <KeyValue
+                  label={t(locale, "throughput")}
+                  value={formatThroughput(
+                    selected.usage?.output_tokens,
+                    selected.timing.decode_ms / 1000,
+                  )}
+                />
+              </>
+            ) : (
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                {t(locale, "noTiming")}
+              </Text>
+            )}
+          </div>
+        </div>
+      ),
+    });
+  }
   if (selected.kind === "tool") {
     // Tool records split into Payload / Result tabs (dsh convention).
     if (selected.toolInput) {

@@ -27,6 +27,7 @@ import {
   formatSeconds,
   formatThroughput,
   formatTokens,
+  type TrajectoryRecord,
 } from "./trajectory/records";
 import {
   buildTurns,
@@ -290,25 +291,55 @@ export function SessionTraceView({
   );
 
   const searchMatchIndexes = useMemo(() => {
-    const needle = eventSearch.trim().toLowerCase();
-    if (!needle) return null;
+    const terms = eventSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return null;
+    // dsh parity: AND across terms, over every field the inspector can
+    // show — record summaries, tool args/results, thinking, input
+    // messages (middleware deltas), wire-level API payload, options,
+    // skill attribution, and prompt-snapshot tool names.
+    const haystackOf = (record: TrajectoryRecord): string =>
+      [
+        record.text,
+        record.outputText,
+        record.thinkingText,
+        record.toolName,
+        record.toolInput,
+        record.toolOutput,
+        record.toolError,
+        record.model,
+        record.provider,
+        record.marker,
+        record.skillName,
+        record.inSkill,
+        record.guidedSkill,
+        record.channel,
+        record.messages
+          ?.map((message) => `${message.role} ${message.text}`)
+          .join("\n"),
+        record.inputNew
+          ?.map((message) => `${message.role} ${message.text ?? ""}`)
+          .join("\n"),
+        record.apiPayload
+          ? [
+              record.apiPayload.model,
+              ...record.apiPayload.messages.map(
+                (message) => `${message.role} ${message.content}`,
+              ),
+            ].join("\n")
+          : "",
+        record.options ? JSON.stringify(record.options) : "",
+        record.headerTools?.join(" "),
+        record.prompt ?? "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+        .toLowerCase();
     return new Set(
       records
-        .filter((record) =>
-          [
-            record.text,
-            record.outputText,
-            record.thinkingText,
-            record.toolName,
-            record.toolInput,
-            record.toolOutput,
-            record.model,
-          ]
-            .filter(Boolean)
-            .join("\n")
-            .toLowerCase()
-            .includes(needle),
-        )
+        .filter((record) => {
+          const haystack = haystackOf(record);
+          return terms.every((term) => haystack.includes(term));
+        })
         .map((record) => record.index),
     );
   }, [eventSearch, records]);
