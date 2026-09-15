@@ -323,6 +323,9 @@ export interface TrajectoryRecord {
   toolName?: string;
   toolInput?: string;
   toolOutput?: string;
+  /* call-time model-visible schema of this tool (from the active
+   * llm/header snapshot — dsh schemaDetail parity) */
+  toolSchema?: Record<string, unknown>;
   /* skill-load row (builtin Skill tool): the loaded skill's name */
   skillName?: string;
   /* this tool call touched a skill's resources (dir path match) */

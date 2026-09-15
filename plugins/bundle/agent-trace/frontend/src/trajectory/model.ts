@@ -83,6 +83,23 @@ function normalizeSkillPath(text: string): string {
   return text.replace(/[/\\]+/g, "/").toLowerCase();
 }
 
+/** Tool name of a captured schema — OpenAI wire shape
+ * ({"type":"function","function":{"name"}}) or flat ({name}). */
+export function toolSchemaName(
+  schema: Record<string, unknown>,
+): string | undefined {
+  if (typeof schema.name === "string" && schema.name) return schema.name;
+  const fn = schema.function;
+  if (
+    fn &&
+    typeof fn === "object" &&
+    typeof (fn as Record<string, unknown>).name === "string"
+  ) {
+    return (fn as Record<string, unknown>).name as string;
+  }
+  return undefined;
+}
+
 /** Extract [normalizedDir, name] pairs from an <agent-skills> section. */
 function extractSkillDirs(prompt: string): Array<[string, string]> {
   const pairs: Array<[string, string]> = [];
@@ -142,6 +159,9 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
   // The USER record of each run — message/inbound merges into it.
   const userCellByRun = new Map<string, TrajectoryRecord>();
   const promptBySha = new Map<string, string>();
+  // Call-time model-visible tool schemas from the latest llm/header
+  // snapshot — attached to tool records (dsh schemaDetail parity).
+  const schemasByName = new Map<string, Record<string, unknown>>();
   // Skill directories from the latest <agent-skills> prompt section
   // ([normalizedDir, name], longest dir first) + the skills explicitly
   // loaded so far in this session — together they attribute tool calls
@@ -498,6 +518,13 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           raw: [event as unknown as Record<string, unknown>],
         });
         if (sha) promptBySha.set(sha, prompt);
+        if (Array.isArray(schemas)) {
+          schemasByName.clear();
+          for (const schema of schemas) {
+            const name = toolSchemaName(schema);
+            if (name) schemasByName.set(name, schema);
+          }
+        }
         if (prompt) skillDirs = extractSkillDirs(prompt);
         break;
       }
@@ -839,6 +866,7 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
           guidedReason: guidedReason ?? (contentSkill ? "load" : undefined),
           skillSpanId: spanId ?? undefined,
           toolInput: callData.input ? String(callData.input) : undefined,
+          toolSchema: schemasByName.get(toolName),
         };
         appendCell(event.run_id, cell);
         const list = pendingTool.get(event.run_id) ?? [];

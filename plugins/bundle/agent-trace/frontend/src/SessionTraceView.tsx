@@ -328,6 +328,7 @@ export function SessionTraceView({
             ].join("\n")
           : "",
         record.options ? JSON.stringify(record.options) : "",
+        record.toolSchema ? JSON.stringify(record.toolSchema) : "",
         record.headerTools?.join(" "),
         record.prompt ?? "",
       ]

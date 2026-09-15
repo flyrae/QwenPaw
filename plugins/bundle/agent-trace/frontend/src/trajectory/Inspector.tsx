@@ -1132,6 +1132,48 @@ export function Inspector({
         ),
       });
     }
+    // Schema tab: the call-time model-visible tool definition (dsh
+    // schemaDetail parity) — description text + parameters JSON.
+    if (selected.toolSchema) {
+      const fn = selected.toolSchema.function as
+        | { description?: unknown; parameters?: unknown }
+        | undefined;
+      const flat = selected.toolSchema as {
+        description?: unknown;
+        parameters?: unknown;
+      };
+      const description =
+        typeof fn?.description === "string"
+          ? fn.description
+          : typeof flat.description === "string"
+          ? flat.description
+          : undefined;
+      const parameters =
+        fn?.parameters !== undefined ? fn.parameters : flat.parameters;
+      items.push({
+        key: "schema",
+        label: "Schema",
+        children: (
+          <div style={{ display: "grid", gap: 8 }}>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {t(locale, "toolSchemaNote")}
+            </Text>
+            {description ? (
+              <Text
+                style={{
+                  fontSize: 12,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
+              >
+                {description}
+              </Text>
+            ) : null}
+            {parameters !== undefined ? <Pre value={parameters} json /> : null}
+          </div>
+        ),
+      });
+    }
   } else if (
     selected.outputText ||
     selected.thinkingText ||

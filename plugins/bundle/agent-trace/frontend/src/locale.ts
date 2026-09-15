@@ -171,6 +171,7 @@ const STRINGS = {
     decodeLabel: "生成耗时",
     startedAt: "开始时间",
     runViewHint: "查看该请求视图",
+    toolSchemaNote: "调用时模型可见的工具定义（来自当前提示词快照）",
     reasoningShort: "推理",
   },
   "en-US": {
@@ -349,6 +350,8 @@ const STRINGS = {
     decodeLabel: "Decoding",
     startedAt: "Started",
     runViewHint: "Open this request's view",
+    toolSchemaNote:
+      "The model-visible tool definition at call time (from the active prompt snapshot)",
     reasoningShort: "Reasoning",
   },
 } as const;
