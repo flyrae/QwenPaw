@@ -13,6 +13,9 @@ Request-level observability (dsh request-view parity) and search upgrades.
   locale keys for timing labels.
 - The `R#` run badge on ledger rows is clickable and jumps straight to
   that request's view.
+- Tool records gain a **Schema tab** — the model-visible tool
+  definition at call time (description + parameters JSON, from the
+  active prompt snapshot).
 - Inline metric column gains a third dsh-style metric: **reasoning
   tokens** (purple), tooltip-documented breakdown.
 - **Search** is now multi-term AND over every inspector-visible field:
