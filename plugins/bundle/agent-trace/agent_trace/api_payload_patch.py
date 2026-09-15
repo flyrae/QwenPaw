@@ -14,17 +14,66 @@ restore_api_payload_patch() at shutdown/uninstall.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger("qwenpaw.plugins.agent_trace")
 
-_WRAPPER_ATTR = "_agent_trace_api_payload_wrapper"
 _TARGETS = [
-    ("openai.resources.chat.completions",
-     "AsyncCompletions.create"),
-    ("openai.resources.chat.completions",
-     "Completions.create"),
+    ("openai.resources.chat.completions", "AsyncCompletions.create"),
+    ("openai.resources.chat.completions", "Completions.create"),
 ]
+
+# Leading keyword order of ChatCompletions.create(); only used to map
+# POSITIONAL calls onto kwargs (the normal keyword path is exact).
+_POS_PARAMS = (
+    "messages",
+    "model",
+    "temperature",
+    "top_p",
+    "max_tokens",
+    "stream",
+    "tools",
+    "tool_choice",
+    "response_format",
+)
+
+_PARAM_KEYS = (
+    "model",
+    "temperature",
+    "top_p",
+    "stream",
+    "tool_choice",
+    "response_format",
+    "reasoning_effort",
+    "max_tokens",
+)
+
+
+def _not_given_type() -> type | None:
+    """The openai NotGiven sentinel class, when importable."""
+    try:
+        from openai._types import NotGiven  # noqa: PLC0415
+
+        return NotGiven
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _merge_call_kwargs(args: tuple, kwargs: dict) -> dict:
+    """Best-effort single kwargs view of a create() invocation."""
+    call_kwargs: dict = {}
+    for i, name in enumerate(_POS_PARAMS):
+        if i < len(args) and args[i] is not None:
+            call_kwargs[name] = args[i]
+    not_given = _not_given_type()
+    for key, value in kwargs.items():
+        if value is None:
+            continue
+        if not_given is not None and isinstance(value, not_given):
+            continue
+        call_kwargs[key] = value
+    return call_kwargs
 
 
 def _safe_extract_messages(kwargs: dict) -> list:
@@ -43,15 +92,60 @@ def _safe_extract_messages(kwargs: dict) -> list:
                     m = {"role": "?", "content": str(m)[:200]}
             else:
                 m = {"role": "?", "content": str(m)[:200]}
+        content = m.get("content")
+        if isinstance(content, list):
+            # multimodal content blocks: keep type + text/image refs
+            compact = []
+            for block in content:
+                if isinstance(block, dict):
+                    compact.append(
+                        {
+                            "type": block.get("type", "?"),
+                            **(
+                                {"text": block["text"]}
+                                if isinstance(block.get("text"), str)
+                                else {}
+                            ),
+                        },
+                    )
+                else:
+                    compact.append(str(block)[:120])
+            m = {**m, "content": compact}
+        tool_calls = m.get("tool_calls")
+        if isinstance(tool_calls, list):
+            compact_calls = []
+            for call in tool_calls:
+                if not isinstance(call, dict):
+                    compact_calls.append(str(call)[:120])
+                    continue
+                fn = call.get("function") or {}
+                compact_calls.append(
+                    {
+                        "id": call.get("id"),
+                        "name": fn.get("name")
+                        if isinstance(fn, dict)
+                        else None,
+                        "arguments": fn.get("arguments")
+                        if isinstance(fn, dict)
+                        else None,
+                    },
+                )
+            m = {**m, "tool_calls": compact_calls}
         out.append(m)
     return out
 
 
 def _safe_extract_params(kwargs: dict) -> dict:
-    """Extract model/temperature/etc for the event payload."""
-    keys = ("model", "temperature", "top_p", "max_tokens", "stream",
-            "tool_choice", "response_format")
-    return {k: kwargs[k] for k in keys if kwargs.get(k) is not None}
+    """Extract scalar generation params for the event payload."""
+    params: dict = {}
+    for key in _PARAM_KEYS:
+        value = kwargs.get(key)
+        if value is None or isinstance(value, (bool, int, float, str)):
+            if value is not None:
+                params[key] = value
+        elif isinstance(value, (dict, list)):
+            params[key] = value
+    return params
 
 
 def _extract_usage(response: Any) -> dict | None:
@@ -84,16 +178,14 @@ def _record_api_event(
     error: str | None = None,
     duration_ms: float | None = None,
 ) -> None:
-    """Write one llm/api_request or llm/api_response event."""
-    from .service import get_service
+    """Write one sanitized llm/api_request or llm/api_response event."""
     from .context import get_current_run
+    from .service import get_service
 
     service = get_service()
     run = get_current_run()
     if service is None or run is None:
         return
-
-    from . import events as ev
 
     data: dict[str, Any] = {"model": model}
     if messages is not None:
@@ -108,6 +200,10 @@ def _record_api_event(
     if duration_ms is not None:
         data["duration_ms"] = round(duration_ms, 1)
 
+    # Wire-level messages repeat the system prompt on every call; run
+    # them through the same redact/truncate pass as every other event.
+    data = service.sanitize(data)
+
     try:
         service.store.append(
             run.session_id,
@@ -116,70 +212,44 @@ def _record_api_event(
             data,
         )
     except Exception:  # noqa: BLE001
-        logger.debug("agent-trace: api payload event write failed",
-                      exc_info=True)
+        logger.debug(
+            "agent-trace: api payload event write failed", exc_info=True
+        )
 
 
-def _make_wrapper(wrapped, instance, args):
+def _make_wrapper(args: tuple, kwargs: dict):
     """Build the common interception logic for sync/async create()."""
-    import time as _time
-
-    from openai._types import NotGiven
-
-    # Merge positional + keyword into a single kwargs-like view
-    call_kwargs: dict = {}
-    try:
-        sig_params = ("messages", "model", "temperature", "top_p",
-                      "max_tokens", "stream", "tools", "tool_choice",
-                      "response_format")
-        for i, p in enumerate(sig_params):
-            if i < len(args) and args[i] is not None:
-                call_kwargs[p] = args[i]
-        for k, v in kwargs_iter(instance).items():
-            if v is not None and not isinstance(v, NotGiven):
-                call_kwargs[k] = v
-    except Exception:  # noqa: BLE001
-        pass
+    call_kwargs = _merge_call_kwargs(args, kwargs)
 
     model = str(call_kwargs.get("model", "unknown"))
     params = _safe_extract_params(call_kwargs)
     formatted_msgs = _safe_extract_messages(call_kwargs)
     is_stream = bool(call_kwargs.get("stream", False))
 
-    # Record the request (the actual formatted messages)
-    _record_api_event("request", model, messages=formatted_msgs,
-                      params=params)
+    _record_api_event(
+        "request", model, messages=formatted_msgs, params=params
+    )
 
-    start = _time.perf_counter()
+    start = time.perf_counter()
 
     def _on_result(result: Any) -> None:
-        duration_ms = (_time.perf_counter() - start) * 1000
-        if is_stream:
-            # For streams, usage lives on the final chunk; we record
-            # without messages (they were already in the request event)
-            _record_api_event("response", model,
-                              usage=_extract_usage(result),
-                              duration_ms=duration_ms)
-        else:
-            _record_api_event("response", model,
-                              usage=_extract_usage(result),
-                              duration_ms=duration_ms)
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        # Usage was already recorded; for streams it lives on the last
+        # chunk which the tee passes here.
+        _record_api_event(
+            "response",
+            model,
+            usage=_extract_usage(result),
+            duration_ms=duration_ms,
+        )
 
     def _on_error(exc: BaseException) -> None:
-        duration_ms = (_time.perf_counter() - start) * 1000
-        _record_api_event("response", model, error=str(exc),
-                          duration_ms=duration_ms)
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        _record_api_event(
+            "response", model, error=str(exc), duration_ms=duration_ms
+        )
 
-    return call_kwargs, _on_result, _on_error
-
-
-def kwargs_iter(instance) -> dict:
-    """Extract the create() kwargs from the bound call context.
-
-    The wrapt wrapper receives kwargs directly; this is a fallback
-    for positional-arg calls.
-    """
-    return {}
+    return is_stream, _on_result, _on_error
 
 
 # ── Async wrapper ────────────────────────────────────────────────────────
@@ -190,30 +260,37 @@ async def _async_create_wrapper(wrapped, instance, args, kwargs):
     if not _is_active():
         return await wrapped(*args, **kwargs)
 
-    _, on_result, on_error = _make_wrapper(wrapped, instance, args)
+    _, on_result, on_error = _make_wrapper(args, kwargs)
 
     try:
         result = await wrapped(*args, **kwargs)
-        # For streaming results, usage is on the last chunk; try to
-        # extract from the stream's final state
         if hasattr(result, "__aiter__"):
-            # It's an async generator — we need to tee it
+            # It's an async stream — tee it to capture the final chunk.
             return _TeeAsyncStream(result, on_result, on_error)
         on_result(result)
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         on_error(exc)
         raise
 
 
 class _TeeAsyncStream:
-    """Wrap an async stream to capture the final chunk's usage."""
+    """Wrap an async stream to capture the final chunk's usage.
+
+    Everything except iteration delegates to the wrapped stream, so
+    consumers that read ``.response``, ``await close()``, or use it as
+    an async context manager keep working.
+    """
 
     def __init__(self, stream, on_result, on_error):
         self._stream = stream
         self._on_result = on_result
         self._on_error = on_error
         self._last_chunk = None
+        self._settled = False
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
 
     def __aiter__(self):
         return self
@@ -224,14 +301,29 @@ class _TeeAsyncStream:
             self._last_chunk = chunk
             return chunk
         except StopAsyncIteration:
-            if self._last_chunk is not None:
+            if not self._settled:
+                self._settled = True
                 self._on_result(self._last_chunk)
-            else:
-                self._on_result(None)
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
+            if not self._settled:
+                self._settled = True
+                self._on_error(exc)
+            raise
+
+    async def __aenter__(self):
+        enter = getattr(self._stream, "__aenter__", None)
+        if enter is not None:
+            await enter()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if exc is not None and not self._settled:
+            self._settled = True
             self._on_error(exc)
-            raise
+        exit_ = getattr(self._stream, "__aexit__", None)
+        if exit_ is not None:
+            await exit_(exc_type, exc, tb)
 
 
 # ── Sync wrapper ─────────────────────────────────────────────────────────
@@ -242,14 +334,14 @@ def _sync_create_wrapper(wrapped, instance, args, kwargs):
     if not _is_active():
         return wrapped(*args, **kwargs)
 
-    _, on_result, on_error = _make_wrapper(wrapped, instance, args)
+    _, on_result, _on_error = _make_wrapper(args, kwargs)
 
     try:
         result = wrapped(*args, **kwargs)
         on_result(result)
         return result
-    except Exception as exc:
-        on_error(exc)
+    except Exception as exc:  # noqa: BLE001
+        _on_error(exc)
         raise
 
 
@@ -262,6 +354,14 @@ def _is_active() -> bool:
     return _active
 
 
+def _resolve_target(module_name: str, attr_path: str):
+    """Walk ``module.Class.method`` down to the bound callable."""
+    node: Any = __import__(module_name, fromlist=["_x"])
+    for part in attr_path.split("."):
+        node = getattr(node, part)
+    return node
+
+
 def apply_api_payload_patch() -> None:
     """Attach the wrapt wrappers to the OpenAI SDK."""
     global _active
@@ -271,37 +371,29 @@ def apply_api_payload_patch() -> None:
     from wrapt import wrap_function_wrapper
 
     for module_name, attr_path in _TARGETS:
+        target = f"{module_name}.{attr_path}"
         try:
-            existing = getattr(
-                __import__(module_name, fromlist=["_x"]),
-                attr_path.split(".")[-1],
-            )
-            if hasattr(existing, _WRAPPER_ATTR):
-                # Another patcher already wrapped it (e.g. qwenpaw-pet)
+            existing = _resolve_target(module_name, attr_path)
+            if hasattr(existing, "__wrapped__"):
+                # Someone (Langfuse, litellm, ...) already wrapped it;
+                # wrapt chains transparently — just note it.
                 logger.debug(
-                    "agent-trace: %s.%s already patched, chaining",
-                    module_name, attr_path,
+                    "agent-trace: %s already wrapped, chaining", target
                 )
 
-            def _mark(wrapped_fn):
-                setattr(wrapped_fn, _WRAPPER_ATTR, True)
-                return wrapped_fn
-
-            if "Async" in attr_path:
-                wrapper = _async_create_wrapper
-            else:
-                wrapper = _sync_create_wrapper
+            wrapper = (
+                _async_create_wrapper
+                if attr_path.startswith("Async")
+                else _sync_create_wrapper
+            )
 
             wrap_function_wrapper(module_name, attr_path, wrapper)
             logger.info(
-                "agent-trace: API payload patch applied to %s.%s",
-                module_name, attr_path,
+                "agent-trace: API payload patch applied to %s", target
             )
         except Exception:  # noqa: BLE001
             logger.warning(
-                "agent-trace: failed to patch %s.%s",
-                module_name, attr_path,
-                exc_info=True,
+                "agent-trace: failed to patch %s", target, exc_info=True
             )
 
     _active = True
@@ -316,5 +408,6 @@ def restore_api_payload_patch() -> None:
     """
     global _active
     _active = False
-    logger.info("agent-trace: API payload patch deactivated "
-                "(pass-through until restart)")
+    logger.info(
+        "agent-trace: API payload patch deactivated (pass-through until restart)"
+    )

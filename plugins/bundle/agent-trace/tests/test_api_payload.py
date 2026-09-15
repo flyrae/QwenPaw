@@ -176,3 +176,112 @@ class TestPatchLifecycle:
 
         api_payload_patch.restore_api_payload_patch()
         assert api_payload_patch._active is False
+
+    def test_resolve_target_walks_class_path(self):
+        """Regression: the pre-check must resolve Module.Class.method,
+        not getattr(module, 'create') — the bug that produced
+        'module ... has no attribute create' at startup."""
+        import openai.resources.chat.completions  # noqa: F401
+
+        from agent_trace.api_payload_patch import _resolve_target
+
+        create = _resolve_target(
+            "openai.resources.chat.completions", "Completions.create"
+        )
+        assert callable(create)
+
+    def test_apply_attaches_without_warning(self, caplog):
+        """The patch must actually attach to the real SDK (not just set
+        the active flag while every target fails into a warning)."""
+        import logging
+
+        import openai.resources.chat.completions as completions_mod
+
+        from agent_trace import api_payload_patch
+
+        api_payload_patch._active = False
+        with caplog.at_level(logging.WARNING, logger="qwenpaw.plugins.agent_trace"):
+            api_payload_patch.apply_api_payload_patch()
+        try:
+            assert not [
+                r for r in caplog.records if "failed to patch" in r.message
+            ], caplog.text
+            # wrapt attaches a BoundFunctionWrapper exposing __wrapped__
+            assert hasattr(
+                completions_mod.Completions.create, "__wrapped__"
+            )
+            assert hasattr(
+                completions_mod.AsyncCompletions.create, "__wrapped__"
+            )
+        finally:
+            api_payload_patch.restore_api_payload_patch()
+
+
+class TestWrapperCapture:
+    async def test_async_wrapper_captures_kwargs_call(
+        self, service, hook_ctx
+    ):
+        """Regression: create() is invoked with KEYWORD arguments by the
+        SDK; the wrapper must merge them (an earlier version dropped
+        kwargs entirely and recorded an empty payload)."""
+        from agent_trace import api_payload_patch
+        from agent_trace.context import set_current_run
+        from test_capture import drained_events
+
+        await AgentTraceRunStartHook().run(hook_ctx)
+
+        api_payload_patch._active = True
+        try:
+
+            async def fake_create(**kwargs):
+                return _make_fake_response()
+
+            result = await api_payload_patch._async_create_wrapper(
+                fake_create, None, (), _make_record_kwargs()
+            )
+            assert result.id == "chatcmpl-test"
+        finally:
+            api_payload_patch.restore_api_payload_patch()
+            set_current_run(None)
+
+        await AgentTraceFinalizeHook().run(hook_ctx)
+        events = await drained_events(service, "sess-1")
+        req = [
+            e for e in events if e["type"] == "llm/api_request"
+        ]
+        assert len(req) == 1
+        data = req[0]["data"]
+        assert data["model"] == "test-model"
+        assert data["message_count"] == 3
+        assert data["messages"][0]["content"] == "You are helpful."
+        assert data["params"]["temperature"] == 0.7
+
+    async def test_tee_stream_proxies_attributes_and_settles_once(
+        self, service
+    ):
+        from agent_trace import api_payload_patch
+
+        settled: list = []
+
+        class FakeStream:
+            response = "httpx-response"
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+        tee = api_payload_patch._TeeAsyncStream(
+            FakeStream(),
+            on_result=lambda chunk: settled.append(("ok", chunk)),
+            on_error=lambda exc: settled.append(("err", exc)),
+        )
+        # Attribute access delegates to the wrapped stream.
+        assert tee.response == "httpx-response"
+        # Draining the stream settles the response exactly once.
+        async for _ in tee:
+            pass
+        async for _ in tee:
+            pass
+        assert settled == [("ok", None)]
