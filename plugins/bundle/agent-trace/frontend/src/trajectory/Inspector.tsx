@@ -20,6 +20,7 @@ import {
   formatThroughput,
   formatTokens,
   recordKindLabel,
+  type ApiPayloadMessage,
 } from "./records";
 import { formatBytes } from "../uiShared";
 
@@ -1412,81 +1413,10 @@ export function Inspector({
                   key: "api-msgs",
                   label: `${t(locale, "apiMessages")} (${ap.messages.length})`,
                   children: (
-                    <div style={{ display: "grid", gap: 6 }}>
-                      {ap.messages.map((m, i) => (
-                        <div
-                          key={i}
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "auto 1fr",
-                            gap: "2px 8px",
-                            alignItems: "start",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 4,
-                              alignItems: "center",
-                              gridColumn: "1 / -1",
-                            }}
-                          >
-                            <Tag
-                              color={
-                                m.role === "tool"
-                                  ? "gold"
-                                  : m.role === "system"
-                                  ? "green"
-                                  : m.role === "user"
-                                  ? "blue"
-                                  : "purple"
-                              }
-                              style={{
-                                marginInlineEnd: 0,
-                                fontSize: 10,
-                                lineHeight: "16px",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {m.role}
-                            </Tag>
-                            <Text
-                              type="secondary"
-                              style={{ fontSize: 10, flexShrink: 0 }}
-                            >
-                              #{i + 1}
-                            </Text>
-                            {m.toolCallId ? (
-                              <Text code style={{ fontSize: 9, flexShrink: 0 }}>
-                                …{m.toolCallId.slice(-8)}
-                              </Text>
-                            ) : null}
-                            <Text
-                              type="secondary"
-                              style={{ fontSize: 10, flexShrink: 0 }}
-                            >
-                              {formatTokens(m.content.length)}{" "}
-                              {t(locale, "charUnit")}
-                            </Text>
-                          </div>
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              minWidth: 0,
-                              overflow: "hidden",
-                              display: "-webkit-box",
-                              WebkitLineClamp: 3,
-                              WebkitBoxOrient: "vertical" as never,
-                              whiteSpace: "pre-wrap",
-                              wordBreak: "break-word",
-                              color: "rgba(128,128,128,1)",
-                            }}
-                          >
-                            {m.content.slice(0, 400) || "—"}
-                          </Text>
-                        </div>
-                      ))}
-                    </div>
+                    <ApiMessagesSection
+                      messages={ap.messages}
+                      locale={locale}
+                    />
                   ),
                 },
               ]}
@@ -1700,6 +1630,178 @@ const RESET_STATUS_LABEL: Record<
 };
 
 /** One input message with a 3-line preview and a show-full toggle. */
+const API_TAIL_DEFAULT = 8;
+const API_ROLE_COLORS: Record<string, string> = {
+  system: "green",
+  user: "blue",
+  tool: "gold",
+};
+
+/**
+ * Wire-level message list built for scanning: role filter chips, a
+ * recent-tail focus with an "earlier" reveal (the prefix repeats the
+ * same context on every call), and compact one-line rows that expand
+ * in place — one at a time — instead of a wall of lookalike previews.
+ */
+function ApiMessagesSection({
+  messages,
+  locale,
+}: {
+  messages: ApiPayloadMessage[];
+  locale: ReturnType<typeof storedLocale>;
+}) {
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [showEarlier, setShowEarlier] = useState(false);
+
+  const counts = new Map<string, number>();
+  for (const message of messages) {
+    counts.set(message.role, (counts.get(message.role) ?? 0) + 1);
+  }
+  const filteredIdx =
+    roleFilter === null
+      ? messages.map((_, i) => i)
+      : messages.flatMap((message, i) =>
+          message.role === roleFilter ? [i] : [],
+        );
+  const hiddenPrefix =
+    !showEarlier &&
+    roleFilter === null &&
+    messages.length > API_TAIL_DEFAULT + 4
+      ? messages.length - API_TAIL_DEFAULT
+      : 0;
+  const visibleIdx = filteredIdx.filter((i) => i >= hiddenPrefix);
+
+  const chip = (label: string, active: boolean, onClick: () => void) => (
+    <span
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "0 8px",
+        borderRadius: 999,
+        fontSize: 10,
+        lineHeight: "18px",
+        cursor: "pointer",
+        userSelect: "none",
+        border: `1px solid ${
+          active ? "rgba(22,119,255,0.6)" : "rgba(128,128,128,0.35)"
+        }`,
+        background: active ? "rgba(22,119,255,0.10)" : "transparent",
+        color: active ? "#1677ff" : "rgba(128,128,128,1)",
+      }}
+    >
+      {label}
+    </span>
+  );
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {chip(
+          `${t(locale, "apiFilterAll")} ${messages.length}`,
+          roleFilter === null,
+          () => setRoleFilter(null),
+        )}
+        {[...counts.entries()].map(([role, count]) =>
+          chip(`${role} ${count}`, roleFilter === role, () =>
+            setRoleFilter(roleFilter === role ? null : role),
+          ),
+        )}
+      </div>
+      {hiddenPrefix > 0 ? (
+        <a
+          style={{ fontSize: 11 }}
+          onClick={() => setShowEarlier(true)}
+        >{`⋯ ${t(locale, "apiShowEarlier")} (${hiddenPrefix})`}</a>
+      ) : null}
+      {showEarlier && roleFilter === null && hiddenPrefix === 0 ? (
+        <a style={{ fontSize: 11 }} onClick={() => setShowEarlier(false)}>
+          {t(locale, "apiCollapseEarlier")}
+        </a>
+      ) : null}
+      <div style={{ display: "grid", gap: 4 }}>
+        {visibleIdx.map((i) => {
+          const message = messages[i];
+          const expanded = expandedIdx === i;
+          return (
+            <div
+              key={i}
+              style={{
+                borderRadius: 6,
+                border: `1px solid ${
+                  expanded ? "rgba(22,119,255,0.35)" : "rgba(128,128,128,0.18)"
+                }`,
+                padding: expanded ? "4px 8px" : "2px 8px",
+                background: expanded ? "rgba(22,119,255,0.04)" : "transparent",
+              }}
+            >
+              <div
+                onClick={() => setExpandedIdx(expanded ? null : i)}
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  alignItems: "center",
+                  cursor: "pointer",
+                  minWidth: 0,
+                }}
+              >
+                <Tag
+                  color={API_ROLE_COLORS[message.role] ?? "purple"}
+                  style={{
+                    marginInlineEnd: 0,
+                    fontSize: 10,
+                    lineHeight: "16px",
+                    flexShrink: 0,
+                  }}
+                >
+                  {message.role}
+                </Tag>
+                <Text type="secondary" style={{ fontSize: 10, flexShrink: 0 }}>
+                  #{i + 1}
+                </Text>
+                {message.toolCallId ? (
+                  <Text code style={{ fontSize: 9, flexShrink: 0 }}>
+                    …{message.toolCallId.slice(-8)}
+                  </Text>
+                ) : null}
+                <Text type="secondary" style={{ fontSize: 10, flexShrink: 0 }}>
+                  {formatTokens(message.content.length)} {t(locale, "charUnit")}
+                </Text>
+                {!expanded ? (
+                  <Text
+                    type="secondary"
+                    style={{
+                      fontSize: 11,
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {message.content.split("\n", 1)[0].slice(0, 120) || "—"}
+                  </Text>
+                ) : null}
+              </div>
+              {expanded ? (
+                <div
+                  style={{
+                    marginTop: 4,
+                    maxHeight: 260,
+                    overflowY: "auto",
+                  }}
+                >
+                  <Pre value={message.content} />
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function InputMessageItem({
   message,
   locale,

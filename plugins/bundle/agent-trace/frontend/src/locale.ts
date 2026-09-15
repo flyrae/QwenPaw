@@ -172,6 +172,9 @@ const STRINGS = {
     startedAt: "开始时间",
     runViewHint: "查看该请求视图",
     toolSchemaNote: "调用时模型可见的工具定义（来自当前提示词快照）",
+    apiFilterAll: "全部",
+    apiShowEarlier: "显示更早的消息",
+    apiCollapseEarlier: "收起，只看最近",
     reasoningShort: "推理",
   },
   "en-US": {
@@ -352,6 +355,9 @@ const STRINGS = {
     runViewHint: "Open this request's view",
     toolSchemaNote:
       "The model-visible tool definition at call time (from the active prompt snapshot)",
+    apiFilterAll: "All",
+    apiShowEarlier: "Show earlier messages",
+    apiCollapseEarlier: "Collapse to recent only",
     reasoningShort: "Reasoning",
   },
 } as const;
