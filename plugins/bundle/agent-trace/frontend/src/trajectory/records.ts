@@ -281,6 +281,46 @@ export interface ApiPayload {
   durationMs?: number;
 }
 
+/**
+ * Decode one wire-level message content into displayable text.
+ *
+ * Some provider formatters (and the sanitize pass) leave content as a
+ * JSON-encoded block array STRING — `[{"type":"text","text":"…"}]` —
+ * which must not be shown raw. Parse it when possible and join the
+ * block texts; non-text blocks degrade to a `[type]` marker.
+ */
+export function decodeWireContent(content: string): string {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) return content;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return content;
+  }
+  const blocks = Array.isArray(parsed) ? parsed : [parsed];
+  const parts: string[] = [];
+  for (const block of blocks) {
+    if (
+      block &&
+      typeof block === "object" &&
+      typeof (block as Record<string, unknown>).text === "string"
+    ) {
+      const text = (block as Record<string, unknown>).text as string;
+      if (text) parts.push(text);
+    } else if (
+      block &&
+      typeof block === "object" &&
+      typeof (block as Record<string, unknown>).type === "string"
+    ) {
+      parts.push(`[${(block as Record<string, unknown>).type}]`);
+    } else if (typeof block === "string") {
+      if (block) parts.push(block);
+    }
+  }
+  return parts.length > 0 ? parts.join("\n") : content;
+}
+
 /** One ledger row: a user input, an LLM call, a tool call, or a marker. */
 export interface TrajectoryRecord {
   index: number;

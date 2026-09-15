@@ -17,7 +17,7 @@ import type {
   TrajectoryTurnModel,
   UsageInfo,
 } from "./records";
-import { diffContextReset, epochMs } from "./records";
+import { decodeWireContent, diffContextReset, epochMs } from "./records";
 import type { ContextResetDetail } from "./records";
 import {
   SkillSpanTracker,
@@ -660,10 +660,13 @@ export function buildTurns(events: TraceEvent[]): TrajectoryTurnModel[] {
             model: String(data.model ?? "unknown"),
             messages: msgs.map((m) => ({
               role: String(m.role ?? "?"),
-              content:
+              // Provider formatters may leave the block array as a
+              // JSON string — decode it into readable text.
+              content: decodeWireContent(
                 typeof m.content === "string"
                   ? m.content
                   : JSON.stringify(m.content ?? ""),
+              ),
               toolCallId:
                 typeof m.tool_call_id === "string" ? m.tool_call_id : undefined,
             })),

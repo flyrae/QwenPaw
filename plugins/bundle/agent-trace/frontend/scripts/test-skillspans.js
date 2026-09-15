@@ -45,6 +45,7 @@ const {
   spanEndT,
 } = require(path.join(tmp, "trajectory", "skillSpans.js"));
 const {
+  decodeWireContent,
   diffContextReset,
   estimateTokensFromChars,
 } = require(path.join(tmp, "trajectory", "records.js"));
@@ -291,6 +292,33 @@ check(
   check(
     "estimator intact",
     estimateTokensFromChars(8800, "qwen3-max") === 4000,
+  );
+
+  // Wire-content decoding: JSON block-array strings become text.
+  check(
+    "wire decode block array string",
+    decodeWireContent(
+      String.raw`[{"type":"text","text":"# Agent Identity"},{"type":"text","text":"line 2"}]`,
+    ) === "# Agent Identity\nline 2",
+  );
+  check(
+    "wire decode single block string",
+    decodeWireContent(String.raw`[{"type":"text","text":"查看今天的天气"}]`) ===
+      "查看今天的天气",
+  );
+  check(
+    "wire decode non-text block marker",
+    decodeWireContent(String.raw`[{"type":"image_url","url":"x"}]`) ===
+      "[image_url]",
+  );
+  check(
+    "wire decode plain string untouched",
+    decodeWireContent("plain content") === "plain content",
+  );
+  check(
+    "wire decode broken json untouched",
+    decodeWireContent('{"type":"text", "text": ') ===
+      '{"type":"text", "text": ',
   );
 }
 

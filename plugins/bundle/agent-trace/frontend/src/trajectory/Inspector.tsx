@@ -1412,51 +1412,77 @@ export function Inspector({
                   key: "api-msgs",
                   label: `${t(locale, "apiMessages")} (${ap.messages.length})`,
                   children: (
-                    <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ display: "grid", gap: 6 }}>
                       {ap.messages.map((m, i) => (
                         <div
                           key={i}
                           style={{
-                            display: "flex",
-                            gap: 6,
-                            alignItems: "baseline",
+                            display: "grid",
+                            gridTemplateColumns: "auto 1fr",
+                            gap: "2px 8px",
+                            alignItems: "start",
                           }}
                         >
-                          <Tag
-                            color={
-                              m.role === "tool"
-                                ? "gold"
-                                : m.role === "system"
-                                ? "green"
-                                : m.role === "user"
-                                ? "blue"
-                                : "purple"
-                            }
+                          <div
                             style={{
-                              marginInlineEnd: 0,
-                              fontSize: 9,
-                              lineHeight: "14px",
-                              flexShrink: 0,
+                              display: "flex",
+                              gap: 4,
+                              alignItems: "center",
+                              gridColumn: "1 / -1",
                             }}
                           >
-                            {m.role}
-                          </Tag>
-                          {m.toolCallId ? (
-                            <Text code style={{ fontSize: 9, flexShrink: 0 }}>
-                              {m.toolCallId.slice(-8)}
+                            <Tag
+                              color={
+                                m.role === "tool"
+                                  ? "gold"
+                                  : m.role === "system"
+                                  ? "green"
+                                  : m.role === "user"
+                                  ? "blue"
+                                  : "purple"
+                              }
+                              style={{
+                                marginInlineEnd: 0,
+                                fontSize: 10,
+                                lineHeight: "16px",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {m.role}
+                            </Tag>
+                            <Text
+                              type="secondary"
+                              style={{ fontSize: 10, flexShrink: 0 }}
+                            >
+                              #{i + 1}
                             </Text>
-                          ) : null}
+                            {m.toolCallId ? (
+                              <Text code style={{ fontSize: 9, flexShrink: 0 }}>
+                                …{m.toolCallId.slice(-8)}
+                              </Text>
+                            ) : null}
+                            <Text
+                              type="secondary"
+                              style={{ fontSize: 10, flexShrink: 0 }}
+                            >
+                              {formatTokens(m.content.length)}{" "}
+                              {t(locale, "charUnit")}
+                            </Text>
+                          </div>
                           <Text
-                            type="secondary"
                             style={{
                               fontSize: 11,
                               minWidth: 0,
                               overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
+                              display: "-webkit-box",
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: "vertical" as never,
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-word",
+                              color: "rgba(128,128,128,1)",
                             }}
                           >
-                            {m.content.slice(0, 80)}
+                            {m.content.slice(0, 400) || "—"}
                           </Text>
                         </div>
                       ))}
