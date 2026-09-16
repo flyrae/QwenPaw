@@ -1,6 +1,19 @@
 # Changelog
 
+## 0.7.1 (2026-09-16)
+
+- A missing ``wrapt`` no longer fails the plugin load: the wire-level
+  API capture degrades to off with one actionable warning (install
+  hint), while runs/LLM/tool events and remote shipping keep working.
+  Affects deployments that received the plugin by file copy (which
+  bypasses dependency installation); ``qwenpaw plugin install``
+  installs wrapt automatically.
+
 ## 0.7.0 (2026-09-16)
+
+> Post-release split: the central collector (`server/`) moved to its
+> own repo, [flyrae/qwenpaw-trace-server](https://github.com/flyrae/qwenpaw-trace-server).
+> This repo is the plugin (edge) side only.
 
 Central collection for enterprise deployments.
 
@@ -29,6 +42,9 @@ Central collection for enterprise deployments.
 - **Session list** gains user (👤 channel user_id) and instance
   (🖥 hostname) badges; central deep links use
   `?session=<instance>~<session_id>`.
+- Instance identity can come from the `QWENPAW_INSTANCE_ID`
+  environment variable (precedence: config `remote_instance_id` >
+  env > persisted `.instance-id`).
 - Tests: 12 shipper cases, 10 server cases, and a 16-check
   end-to-end smoke (real shipper → real server → API → UI shell).
 
