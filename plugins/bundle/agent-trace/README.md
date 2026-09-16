@@ -184,18 +184,39 @@ to restore capture.
 ## Enterprise deployment (central collection)
 
 Multiple QwenPaw instances can ship their traces to one central
-collector for unified, per-user viewing:
+collector for unified, per-user viewing. The collector (ingest +
+read API + portal dashboard + standalone trace UI) lives in its own
+repo: [flyrae/qwenpaw-trace-server](https://github.com/flyrae/qwenpaw-trace-server).
 
-```bash
-# central server (FastAPI + SQLite, same read API + standalone UI)
-cd server && uvicorn app:app --port 8790      # see server/README.md
+On this (edge) side, enable shipping in `<WORKING_DIR>/traces/config.json`:
 
-# each QwenPaw instance: <WORKING_DIR>/traces/config.json
+```json
 { "remote_enabled": true,
   "remote_url": "http://collector.internal:8790",
   "remote_token": "..." }
 ```
 
 Local JSONL files stay the source of truth; shipping is batched,
-gzip'd, retried with a disk queue, and can never block the agent loop.
-Full design, deployment modes, and ops notes: [server/README.md](./server/README.md).
+gzip'd, retried with a disk queue, and can never block the agent
+loop. Instance identity precedence: `remote_instance_id` config >
+`QWENPAW_INSTANCE_ID` env > persisted `traces/.instance-id`.
+
+### Configuration via environment variables
+
+Every setting can be stamped with `AGENT_TRACE_<FIELD>` env vars —
+they override `traces/config.json` at load time (file stays the base,
+env wins; runtime REST config updates persist to the file and are
+re-overridden by env on the next restart):
+
+```bash
+AGENT_TRACE_REMOTE_ENABLED=true \
+AGENT_TRACE_REMOTE_URL=http://collector.internal:8790 \
+AGENT_TRACE_REMOTE_TOKEN=$TOKEN \
+AGENT_TRACE_ENABLED=false        # pause recording without touching files
+```
+
+Booleans take `1/true/yes/on` (and negatives), numbers are clamped to
+the same ranges as the REST config, invalid values log a warning and
+are skipped — env can never crash the plugin. `redact_patterns`
+(list) stays file-only. Secrets note: `AGENT_TRACE_REMOTE_TOKEN`
+keeps the token out of the on-disk config.
