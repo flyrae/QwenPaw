@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.3 (2026-09-20)
+
+- **Frontend:** live poll / refresh merge events by ``seq`` instead of
+  replacing the window, so "load older" history and the current
+  selection survive a running turn. Stale fetches after a session
+  switch are ignored. The session list poll keeps already-loaded pages
+  (up to the 500 cap). Event search is debounced and matches against a
+  precomputed haystack rather than re-stringifying every record on
+  each keystroke.
+
 ## 0.8.2 (2026-09-17)
 
 - ``run/start`` now carries the requester's ``user_id`` (from

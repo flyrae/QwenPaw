@@ -593,7 +593,10 @@ export function Ledger({
 }: LedgerProps) {
   const locale = storedLocale();
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const visibleTurns = turns.filter((turn) => turn.turn !== null);
+  const visibleTurns = React.useMemo(
+    () => turns.filter((turn) => turn.turn !== null),
+    [turns],
+  );
   const multiRequest = visibleTurns.length > 1;
 
   const rows = React.useMemo<LedgerRowModel[]>(() => {

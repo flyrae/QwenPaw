@@ -25,7 +25,7 @@ import {
 
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
-const { useCallback, useEffect, useMemo, useState } = React;
+const { useCallback, useEffect, useMemo, useRef, useState } = React;
 const { Button, Empty, Input, Spin, Tag, Tooltip } = host.antd;
 const {
   CaretRightOutlined,
@@ -224,10 +224,19 @@ export function TracePage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [sessionSearch, setSessionSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
 
   const loadSessions = useCallback(async () => {
     try {
-      const page = await fetchSessionsPage({ limit: 100, offset: 0 });
+      // Poll with a window at least as large as what the user already
+      // loaded so "load more" pages are not wiped every 15s. Backend
+      // caps list_sessions at 500.
+      const keep = sessionsRef.current?.length ?? 0;
+      const page = await fetchSessionsPage({
+        limit: Math.min(500, Math.max(100, keep)),
+        offset: 0,
+      });
       setSessions(page.sessions);
       setSessionsHasMore(page.has_more);
       setError(null);
@@ -241,16 +250,14 @@ export function TracePage() {
     try {
       const page = await fetchSessionsPage({
         limit: 100,
-        offset: sessions?.length ?? 0,
+        offset: sessionsRef.current?.length ?? 0,
       });
       setSessions((prev) => {
         const existing = prev ?? [];
+        const seen = new Set(existing.map((item) => sessionRef(item)));
         return [
           ...existing,
-          ...page.sessions.filter(
-            (item) =>
-              !existing.some((known) => known.session_id === item.session_id),
-          ),
+          ...page.sessions.filter((item) => !seen.has(sessionRef(item))),
         ];
       });
       setSessionsHasMore(page.has_more);
@@ -259,7 +266,7 @@ export function TracePage() {
     } finally {
       setSessionsLoadingMore(false);
     }
-  }, [sessions]);
+  }, []);
 
   useEffect(() => {
     void loadSessions();

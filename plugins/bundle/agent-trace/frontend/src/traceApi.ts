@@ -66,6 +66,35 @@ export interface SessionDetail {
   mtime: number;
 }
 
+/** Merge a newly fetched event window into an already-loaded session.
+ *
+ * Live poll / refresh only return the tail page. Replacing the detail
+ * wholesale would drop events the user already loaded via "load older"
+ * and shift record indexes under the current selection. Union by ``seq``
+ * (later fetch wins on conflict) keeps the union sorted.
+ */
+export function mergeSessionDetail(
+  prev: SessionDetail | null,
+  next: SessionDetail,
+): SessionDetail {
+  if (!prev || prev.events.length === 0) return next;
+  const bySeq = new Map<number, TraceEvent>();
+  for (const event of prev.events) bySeq.set(event.seq, event);
+  for (const event of next.events) bySeq.set(event.seq, event);
+  const events = [...bySeq.values()].sort((a, b) => a.seq - b.seq);
+  return {
+    header: next.header ?? prev.header,
+    events,
+    total_events: Math.max(
+      next.total_events,
+      prev.total_events,
+      events.length,
+    ),
+    size_bytes: Math.max(next.size_bytes, prev.size_bytes),
+    mtime: Math.max(next.mtime, prev.mtime),
+  };
+}
+
 export interface SessionStats {
   runs: number;
   llm_calls: number;
