@@ -1,0 +1,295 @@
+# Agent Trace 🧭
+
+Step-level agent trajectory recording for QwenPaw, inspired by the
+event-sourced session logs of deepseek-harness. The plugin records every
+agent **run**, **LLM call**, and **tool call** (with timings, TTFT /
+decode spans, token usage, and errors) as an append-only JSONL log per
+session, and ships a Console page with a dsh-style trajectory viewer:
+a three-lane timeline (Input / Model / Tools), a searchable ledger
+table, and a record inspector.
+
+> 完整的架构设计、事件模型、API、已知限制与演进记录见
+> [DESIGN.md](./DESIGN.md)（Full architecture, event model, API,
+> limitations, and history: see [DESIGN.md](./DESIGN.md)).
+
+## Attribution
+
+The timeline projection algorithm (`frontend/src/trajectory/timeline.ts`),
+the timeline component and styles (`TimelineBar.tsx`, `timelineCss.ts`),
+and parts of the record/inspector interaction model are adapted from
+[deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)
+(`packages/client/ui-trajectory`), MIT License,
+Copyright (c) 2026 DeepSeek.
+
+## What gets recorded
+
+Each session gets one file under `<WORKING_DIR>/traces/<session_id>.jsonl`.
+The first line is a session header; every following line is one event:
+
+| Event         | Data                                                             |
+| ------------- | ---------------------------------------------------------------- |
+| `run/start`   | trace id, agent, channel, trigger, user query, input msg digest, `root_session_id`/`root_agent_id` for sub-agent runs |
+| `run/end`     | status (`success` / `error` / `cancelled` / `interrupted`), duration, error text |
+| `agent/spawn` | sub-agent pointer written into the root session's trace (`child_session_id` / `child_agent_id` / `child_trace_id`) |
+| `llm/header`  | system-prompt snapshot — recorded once per content change (sha-keyed, `prev_sha256` link, full prompt + tools catalog + full tool schemas) |
+| `llm/call`    | model, message count, input message digest, `messages_meta` size accounting (chars/counts aggregated per role — numbers only, no content), `messages_new` (messages appended since the previous call, content truncated + redacted — after a tool round this shows how tool results enter the model input; `context_reset` marks a rewritten prefix) |
+| `llm/result`  | model, duration, output text, thinking, tool calls the model emitted, token usage (incl. cache read/write), `timing` (`ttft_ms` / `decode_ms`, streaming calls), error |
+| `tool/call`   | tool name, raw input, tool call id                                |
+| `tool/result` | ok, duration, output, error, tool call id, `output_chars`/`output_bytes` (full size before truncation) |
+
+Events are written through an in-memory buffer flushed on a 200 ms
+coalescing window, so the agent loop never blocks on disk IO. Capture is
+fail-open: a tracing failure never breaks the agent.
+
+Payloads are sanitized before persistence:
+
+- string fields are truncated to `max_payload_chars` (default 4000) and
+  marked via `_truncated_fields`
+- built-in redaction for API keys / bearer tokens, plus your own
+  `redact_patterns` regexes
+
+## Console viewer
+
+After installation a **Trace / 轨迹** page appears in the Console. Pick a
+session on the left; the right side is the trajectory view:
+
+- **Toolbar** — timeline projection switch (Sequence / Duration /
+  Time / Actual) and event search (matching rows stay lit, others dim)
+- **Timeline** — dsh-style three-lane gantt strip: user inputs on the
+  Input lane, model calls on the Model lane (with a two-color
+  TTFT → decoding gradient when streaming timing was recorded), tool
+  calls on the Tools lane. Drag horizontally to focus a range (ledger
+  dims outside it), wheel to zoom, right-drag to pan, click a bar to
+  select its record, double-click / Escape to reset.
+- **Ledger** — one row per record with kind tags, request-boundary
+  pills (`Request #N` + status + duration + collapse), per-row request
+  markers (`R2 #15`), inline tool results, token/duration badges, and
+  "load older" paging. System-prompt changes appear as SYSTEM rows
+  (`System Prompt (initial)` / `System Prompt updated`).
+- **Inspector** — drag-resizable pane with three views: a single record
+  (Summary / contents / Timing (Started, Total, TTFT, Decoding,
+  throughput) / Usage), a whole request (Summary / Usage / Timing), or a
+  request header (Summary / line-level Diff against the previous
+  version with context collapsing / full Prompt / Tools catalog). The
+  request Usage tab also decomposes the input into role buckets
+  (system / user / assistant / tool) from size-only capture with
+  per-model chars→tokens estimates, tracks the largest single tool
+  message, and reconciles billed-input growth against the previous
+  round (with the cache-absorbed share); tool records show their
+  pre-truncation output size.
+
+The recording switches live in the page's settings popover.
+
+### Skill observability
+
+Skills are prompt-level progressive disclosure, so the viewer marks the
+two observable layers: `Skill` tool loads render as geekblue rows
+(📚 name + loaded size) with per-request / per-session usage badges, and
+tool calls that touch a skill's resources (the skill dir path appears
+in the command — `cd {skill_dir} && python scripts/...`) carry a ⚡ tag:
+geekblue when that skill was loaded first, **orange when it was used
+without loading the instructions** (bypass) — the session stats strip
+summarizes bypassed skills as `⚡ 未加载即执行: name`.
+
+### Chat-header quick jump
+
+A 🧭 button in the chat header jumps straight to the trace page with
+the **current conversation preselected** (`/plugin/agent-trace?session=…`,
+deep link). Console-local chat ids are first resolved to backend trace
+session ids via `GET /agent-trace/resolve` (chats.json index); a session
+without trace data yet shows a friendly empty state. The link keeps the
+`/console` router basename the host may serve under. On hosts without
+the chat extension API the button silently doesn't register — the
+standalone page keeps working.
+
+## REST API
+
+Mounted at `/api/agent-trace`:
+
+| Method   | Path                            | Purpose                        |
+| -------- | ------------------------------- | ------------------------------ |
+| `GET`    | `/sessions`                     | list session summaries         |
+| `GET`    | `/sessions/{id}?before_seq=&limit=` | read an event window       |
+| `GET`    | `/resolve?chat_id=`             | Console chat id → trace session id |
+| `GET`    | `/sessions/{id}/export`         | download the raw JSONL         |
+| `DELETE` | `/sessions/{id}`                | delete a session's trace       |
+| `GET`/`PUT` | `/config`                    | read / update runtime config  |
+
+## Configuration
+
+Stored in `<WORKING_DIR>/traces/config.json` (editable via `PUT
+/api/agent-trace/config` or the Console settings popover):
+
+| Key                 | Default | Description                          |
+| ------------------- | ------- | ------------------------------------ |
+| `enabled`           | `true`  | master switch (on from install)      |
+| `capture_llm`       | `true`  | record `llm/*` events                |
+| `capture_tools`     | `true`  | record `tool/*` events               |
+| `capture_headers`   | `true`  | record system-prompt/tool changes    |
+| `max_payload_chars` | `4000`  | per-field truncation limit           |
+| `max_prompt_chars`  | `200000` | truncation limit for stored system prompts |
+| `redact_patterns`   | `[]`    | extra redaction regexes              |
+| `retention_days`    | `30`    | delete files older than this         |
+| `max_total_mb`      | `512`   | total size budget (oldest pruned)    |
+| `max_sessions`      | `500`   | max number of session files          |
+
+Retention is enforced at startup and never touches anything outside
+`<WORKING_DIR>/traces/`. Uninstalling the plugin keeps recorded traces;
+delete the directory manually if you want them gone.
+
+## Development
+
+Backend (pure Python, no extra dependencies):
+
+```bash
+pytest plugins/bundle/agent-trace/tests/
+```
+
+Frontend (Vite, React/antd provided by the Console host at runtime):
+
+```bash
+cd plugins/bundle/agent-trace/frontend
+npm install
+npm run build        # emits ../dist/index.js (committed)
+npm run format       # tsc --noEmit + prettier
+```
+
+Install from source:
+
+```bash
+qwenpaw plugin install plugins/bundle/agent-trace
+# or copy/symlink the directory to ~/.qwenpaw/plugins/agent-trace
+```
+
+## Updating after changes
+
+Frontend-only changes (no restart needed):
+
+```bash
+cd plugins/bundle/agent-trace/frontend
+npm run build        # build + guards (icons / bare imports / smoke import)
+cd <repo root>
+qwenpaw plugin install plugins/bundle/agent-trace --force
+# then hard-refresh the Console (Ctrl+Shift+R)
+```
+
+No restart needed: since the host fix that fires `workspace_created`
+hooks after workspace instance replacement, `--force` reinstalls
+re-attach the plugin's runtime hooks onto the fresh instances
+(verified: hot reinstall → new conversation → capture intact; the
+log shows `agent-trace: runtime hooks attached to workspace ...`).
+On hosts without that fix, backend changes still require a restart
+to restore capture.
+
+## Enterprise deployment (central collection)
+
+Multiple QwenPaw instances can ship their traces to one central
+collector for unified, per-user viewing. The collector (ingest +
+read API + portal dashboard + standalone trace UI) lives in its own
+repo: [flyrae/qwenpaw-trace-server](https://github.com/flyrae/qwenpaw-trace-server).
+
+On this (edge) side, enable shipping in `<WORKING_DIR>/traces/config.json`:
+
+```json
+{ "remote_enabled": true,
+  "remote_url": "http://collector.internal:8790",
+  "remote_token": "..." }
+```
+
+Local JSONL files stay the source of truth; shipping is batched,
+gzip'd, retried with a disk queue, and can never block the agent
+loop. The disk queue (`.remote-queue.jsonl`) drains on its own —
+the flush tick retries it every 30 s even with no new events, and
+failures (e.g. an invalid token) surface in the connection log
+rather than failing silently. Instance identity precedence:
+`remote_instance_id` config > `QWENPAW_INSTANCE_ID` env >
+persisted `traces/.instance-id`.
+
+### Fleet enrollment (many machines, zero per-host tokens)
+
+For fleets, hand out one admin-generated **enrollment key**
+(collector ≥ v0.5.0: portal "设备注册" section or
+`POST /api/agent-trace/admin/enroll-keys`) instead of a token per
+machine:
+
+```json
+{ "remote_enabled": true,
+  "remote_url": "http://collector.internal:8790",
+  "remote_enroll_key": "enroll_..." }
+```
+
+Or purely via env (containers / systemd / fleet provisioning):
+
+```bash
+AGENT_TRACE_REMOTE_ENABLED=true \
+AGENT_TRACE_REMOTE_URL=http://collector.internal:8790 \
+AGENT_TRACE_REMOTE_ENROLL_KEY=enroll_...
+```
+
+On first load the shipper exchanges the key at `POST /enroll` for an
+**instance-scoped token** (it can only see its own machine's
+sessions) and persists it to `traces/.instance-token`; restarts
+reuse it without re-enrolling. If that token is ever revoked
+server-side, the shipper sees 401, re-enrolls automatically, and
+keeps going. Token precedence: persisted instance token >
+`remote_enroll_key` (first use) > `remote_token`. A rejected key
+(falls back to `remote_token` when set) retries at most once per
+60 s.
+
+### Configuration via environment variables
+
+Every setting can be stamped with `AGENT_TRACE_<FIELD>` env vars —
+they override `traces/config.json` at load time (file stays the base,
+env wins; runtime REST config updates persist to the file and are
+re-overridden by env on the next restart):
+
+```bash
+# Central collection with a hand-issued token:
+AGENT_TRACE_REMOTE_ENABLED=true \
+AGENT_TRACE_REMOTE_URL=http://collector.internal:8790 \
+AGENT_TRACE_REMOTE_TOKEN=$TOKEN
+
+# Fleet enrollment (collector ≥ v0.5.0): stamp the bootstrap key via
+# env — ideal for containers/systemd units where config.json is not
+# writable at provision time. The instance token it exchanges for is
+# persisted to traces/.instance-token, not the env.
+AGENT_TRACE_REMOTE_ENABLED=true \
+AGENT_TRACE_REMOTE_URL=http://collector.internal:8790 \
+AGENT_TRACE_REMOTE_ENROLL_KEY=$ENROLL_KEY \
+AGENT_TRACE_REMOTE_INSTANCE_ID=edge-sh-01   # optional, stable identity
+
+AGENT_TRACE_ENABLED=false        # pause recording without touching files
+```
+
+Booleans take `1/true/yes/on` (and negatives), numbers are clamped to
+the same ranges as the REST config, invalid values log a warning and
+are skipped — env can never crash the plugin. `redact_patterns`
+(list) stays file-only. Secrets note: `AGENT_TRACE_REMOTE_TOKEN` /
+`AGENT_TRACE_REMOTE_ENROLL_KEY` keep credentials out of the on-disk
+config.
+
+Full variable reference (all override `traces/config.json`):
+
+| Env variable | Type / default | Purpose |
+|---|---|---|
+| `AGENT_TRACE_ENABLED` | bool / `true` | master recording switch |
+| `AGENT_TRACE_CAPTURE_LLM` | bool / `true` | LLM call/result events |
+| `AGENT_TRACE_CAPTURE_TOOLS` | bool / `true` | tool call/result events |
+| `AGENT_TRACE_CAPTURE_HEADERS` | bool / `true` | request header capture |
+| `AGENT_TRACE_CAPTURE_APPROVALS` | bool / `true` | approval events |
+| `AGENT_TRACE_CAPTURE_MESSAGES` | bool / `true` | message in/out events |
+| `AGENT_TRACE_MAX_PAYLOAD_CHARS` | int / `4000` | per-event payload cap |
+| `AGENT_TRACE_MAX_PROMPT_CHARS` | int / `200000` | prompt text cap |
+| `AGENT_TRACE_RETENTION_DAYS` | int / `30` | local session retention |
+| `AGENT_TRACE_MAX_TOTAL_MB` | int / `512` | local storage budget |
+| `AGENT_TRACE_MAX_SESSIONS` | int / `500` | max kept session files |
+| `AGENT_TRACE_REMOTE_ENABLED` | bool / `false` | turn on the shipper |
+| `AGENT_TRACE_REMOTE_URL` | str / — | collector base URL (http(s)://) |
+| `AGENT_TRACE_REMOTE_TOKEN` | str / — | hand-issued bearer token |
+| `AGENT_TRACE_REMOTE_ENROLL_KEY` | str / — | bootstrap key → instance-scoped token (≥ v0.8.0) |
+| `AGENT_TRACE_REMOTE_INSTANCE_ID` | str / — | stable instance identity |
+| `AGENT_TRACE_REMOTE_BATCH_MAX_EVENTS` | int / `200` | events per batch |
+| `AGENT_TRACE_REMOTE_BATCH_MAX_BYTES` | int / `1000000` | bytes per batch |
+| `AGENT_TRACE_REMOTE_FLUSH_INTERVAL_S` | float / `2.0` | flush cadence |
+| `AGENT_TRACE_REMOTE_QUEUE_MAX` | int / `10000` | in-memory queue cap |
+| `AGENT_TRACE_REMOTE_TIMEOUT_S` | float / `5.0` | per-request timeout |
