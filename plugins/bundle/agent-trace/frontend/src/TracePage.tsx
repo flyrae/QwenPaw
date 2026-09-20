@@ -223,19 +223,32 @@ export function TracePage() {
   const [sessionsLoadingMore, setSessionsLoadingMore] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [sessionSearch, setSessionSearch] = useState("");
+  const [sessionQuery, setSessionQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const sessionQueryRef = useRef(sessionQuery);
+  sessionQueryRef.current = sessionQuery;
+
+  useEffect(() => {
+    const handle = window.setTimeout(
+      () => setSessionQuery(sessionSearch.trim()),
+      200,
+    );
+    return () => window.clearTimeout(handle);
+  }, [sessionSearch]);
 
   const loadSessions = useCallback(async () => {
     try {
+      const query = sessionQueryRef.current;
       // Poll with a window at least as large as what the user already
       // loaded so "load more" pages are not wiped every 15s. Backend
-      // caps list_sessions at 500.
-      const keep = sessionsRef.current?.length ?? 0;
+      // caps list_sessions at 500. Search always reloads the first page.
+      const keep = query ? 0 : (sessionsRef.current?.length ?? 0);
       const page = await fetchSessionsPage({
-        limit: Math.min(500, Math.max(100, keep)),
+        limit: query ? 100 : Math.min(500, Math.max(100, keep)),
         offset: 0,
+        q: query || undefined,
       });
       setSessions(page.sessions);
       setSessionsHasMore(page.has_more);
@@ -248,9 +261,11 @@ export function TracePage() {
   const loadMoreSessions = useCallback(async () => {
     setSessionsLoadingMore(true);
     try {
+      const query = sessionQueryRef.current;
       const page = await fetchSessionsPage({
         limit: 100,
         offset: sessionsRef.current?.length ?? 0,
+        q: query || undefined,
       });
       setSessions((prev) => {
         const existing = prev ?? [];
@@ -270,6 +285,9 @@ export function TracePage() {
 
   useEffect(() => {
     void loadSessions();
+  }, [loadSessions, sessionQuery]);
+
+  useEffect(() => {
     // Deep link: /plugin/agent-trace?session=<id> preselects it. Console
     // local chat ids (timestamp format) resolve to the backend id first.
     try {
@@ -287,7 +305,7 @@ export function TracePage() {
     } catch {
       /* ignore malformed URLs */
     }
-  }, [loadSessions]);
+  }, []);
 
   // Keep the URL's ?session= in sync with the sidebar selection so the
   // address stays shareable/refreshable. replaceState: no reload, no
@@ -461,7 +479,7 @@ export function TracePage() {
                 locale={locale}
               />
             )}
-            {sessions !== null && sessionsHasMore && !sessionSearch.trim() && (
+            {sessions !== null && sessionsHasMore && (
               <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
                 <a
                   onClick={() => void loadMoreSessions()}

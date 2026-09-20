@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.4 (2026-09-20)
+
+- **Frontend:** memoize ledger record/request rows so selecting one
+  line does not rebuild the whole table; virtualize from 80 rows
+  (was 150). Session search is debounced and sent as ``q`` so it
+  matches beyond the currently loaded page.
+
 ## 0.8.3 (2026-09-20)
 
 - **Frontend:** live poll / refresh merge events by ``seq`` instead of

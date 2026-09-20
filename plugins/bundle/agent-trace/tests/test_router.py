@@ -88,6 +88,21 @@ class TestSessions:
         assert body["total"] == 0
         assert body["has_more"] is False
 
+    async def test_list_q_filters_session_id(self, client, service):
+        await seed_session(service, "sess-alpha")
+        await seed_session(service, "sess-beta")
+        listed = await client.get("/agent-trace/sessions")
+        assert listed.json()["total"] == 2
+        filtered = await client.get(
+            "/agent-trace/sessions",
+            params={"q": "alpha"},
+        )
+        body = filtered.json()
+        assert body["total"] == 1
+        assert [item["session_id"] for item in body["sessions"]] == [
+            "sess-alpha",
+        ]
+
     async def test_status_without_shipper(self, client):
         response = await client.get("/agent-trace/status")
         assert response.status_code == 200
