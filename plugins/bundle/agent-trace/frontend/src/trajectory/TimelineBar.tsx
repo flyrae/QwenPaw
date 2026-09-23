@@ -23,9 +23,10 @@ import {
   deriveTrajectoryTimeline,
   formatTimelineOffset,
   type TrajectoryTimelineMode,
+  type TrajectoryTimelineSpan,
   type TrajectoryTimeRange,
 } from "./timeline";
-import { storedLocale, t } from "../locale";
+import { t, type TraceLocale } from "../locale";
 
 ensureTimelineStyles();
 
@@ -109,27 +110,29 @@ function timelineKindLabel(kind: RecordKind): string {
 function timelineTooltipLabel(
   kind: RecordKind,
   detail: TimelineRecordDetail | undefined,
+  locale: TraceLocale,
 ): string {
   const heading = timelineKindLabel(kind);
   if (detail === undefined) return heading;
   const duration =
     detail.durationMs === undefined
       ? null
-      : `Total ${formatTimelineOffset(detail.durationMs)}`;
+      : `${t(locale, "duration")} ${formatTimelineOffset(detail.durationMs)}`;
   const range =
     detail.startedAt === undefined
       ? null
       : detail.durationMs === undefined
-      ? `Started ${formatEpochMs(detail.startedAt)}`
+      ? `${t(locale, "startedAt")} ${formatEpochMs(detail.startedAt)}`
       : `${formatEpochMs(detail.startedAt)} → ${formatEpochMs(
           detail.startedAt + detail.durationMs,
         )}`;
   const segments =
     detail.ttftMs === undefined || detail.decodingMs === undefined
       ? null
-      : `TTFT ${formatTimelineOffset(
-          detail.ttftMs,
-        )} · Decoding ${formatTimelineOffset(detail.decodingMs)}`;
+      : `${t(locale, "ttftLabel")} ${formatTimelineOffset(detail.ttftMs)} · ${t(
+          locale,
+          "decodeLabel",
+        )} ${formatTimelineOffset(detail.decodingMs)}`;
   const timing = [duration, segments]
     .filter((value) => value !== null)
     .join(" · ");
@@ -157,6 +160,7 @@ export interface TimelineBarProps {
   onRecordFocus?: (index: number) => void;
   /** Open the inspector for a clicked skill band. */
   onSkillSpanSelect?: (spanId: string) => void;
+  locale: TraceLocale;
 }
 
 function orderedRange(left: number, right: number): FractionRange {
@@ -236,26 +240,25 @@ function EarlierHistoryBoundary({
   loading,
   onHover,
   onLoad,
+  locale,
 }: {
   loading: boolean;
   onHover: () => void;
   onLoad: (() => void) | undefined;
+  locale: TraceLocale;
 }) {
+  const label = t(
+    locale,
+    loading ? "loadingEarlierHistory" : "loadEarlierHistory",
+  );
   return (
-    <TooltipSpan
-      label={
-        loading ? "Loading earlier history…" : "Click to load earlier history"
-      }
-      placement="right"
-    >
+    <TooltipSpan label={label} placement="right">
       <button
         type="button"
         className={css.earlierHistory}
         data-earlier-history
         data-loading={loading || undefined}
-        aria-label={
-          loading ? "Loading earlier history" : "Load earlier history"
-        }
+        aria-label={label}
         aria-disabled={loading || onLoad === undefined}
         onClick={onLoad}
         onPointerEnter={(event: ReactNS.PointerEvent<HTMLButtonElement>) => {
@@ -275,6 +278,117 @@ function EarlierHistoryBoundary({
   );
 }
 
+/**
+ * Record spans, split out so pointer moves that only shift the hover line
+ * do not re-render every span and its tooltip.
+ */
+const TimelineSpans = React.memo(function TimelineSpans({
+  spans,
+  modelStart,
+  fullDuration,
+  domainStart,
+  domainDuration,
+  mode,
+  selectedIndex,
+  hoveredIndex,
+  searchMatchIndexes,
+  activeRange,
+  detailByIndex,
+  locale,
+}: {
+  spans: readonly TrajectoryTimelineSpan[];
+  modelStart: number;
+  fullDuration: number;
+  domainStart: number;
+  domainDuration: number;
+  mode: TrajectoryTimelineMode;
+  selectedIndex: number | null;
+  hoveredIndex: number | null;
+  searchMatchIndexes: ReadonlySet<number> | null;
+  activeRange: TrajectoryTimeRange | null;
+  detailByIndex: ReadonlyMap<number, TimelineRecordDetail>;
+  locale: TraceLocale;
+}) {
+  return (
+    <>
+      {spans
+        .filter(
+          (span) =>
+            span.index === selectedIndex ||
+            (span.end >= domainStart &&
+              span.start <= domainStart + domainDuration),
+        )
+        .map((span) => {
+          const left = (span.start - modelStart) / fullDuration;
+          const width = (span.end - span.start) / fullDuration;
+          const widthPercent = width * 100;
+          const detail = detailByIndex.get(span.index);
+          const ttftMs = detail?.ttftMs;
+          const decodingMs = detail?.decodingMs;
+          const ttftFraction =
+            ttftMs === undefined ||
+            decodingMs === undefined ||
+            ttftMs + decodingMs <= 0
+              ? null
+              : ttftMs / (ttftMs + decodingMs);
+          return (
+            <TooltipSpan
+              key={span.index}
+              label={timelineTooltipLabel(span.kind, detail, locale)}
+              placement="bottom"
+            >
+              <span
+                aria-hidden="true"
+                className={css.span}
+                data-timeline-span={span.kind}
+                data-timeline-record-index={span.index}
+                data-assistant-timing={
+                  ttftFraction === null ? undefined : "true"
+                }
+                data-error={span.isError || undefined}
+                data-equal-duration={mode === "time" || undefined}
+                data-current={span.index === selectedIndex || undefined}
+                data-hovered={hoveredIndex === span.index || undefined}
+                data-search-match={
+                  searchMatchIndexes === null
+                    ? undefined
+                    : searchMatchIndexes.has(span.index)
+                    ? "true"
+                    : "false"
+                }
+                data-selected={
+                  activeRange === null
+                    ? undefined
+                    : span.start <= activeRange.end &&
+                      span.end >= activeRange.start
+                    ? "true"
+                    : "false"
+                }
+                style={
+                  {
+                    "--trajectory-span-left": `${left * 100}%`,
+                    "--trajectory-span-width": `${widthPercent}%`,
+                    "--trajectory-span-gap": `min(${
+                      widthPercent * 0.08
+                    }%, 1px)`,
+                    "--trajectory-span-lane": span.lane,
+                    ...(ttftFraction === null
+                      ? {}
+                      : {
+                          "--trajectory-assistant-ttft": `${
+                            ttftFraction * 100
+                          }%`,
+                        }),
+                  } as CSSProperties
+                }
+              />
+            </TooltipSpan>
+          );
+        })}
+    </>
+  );
+});
+
 /** Overview renderer with drag ranges, click-sized focus, and Escape reset. */
 export const TimelineBar = React.memo(function TimelineBar({
   turns,
@@ -288,6 +402,7 @@ export const TimelineBar = React.memo(function TimelineBar({
   onRecordSelect,
   onRecordFocus,
   onSkillSpanSelect,
+  locale,
 }: TimelineBarProps) {
   const hostTheme =
     typeof host.useTheme === "function" ? host.useTheme() : undefined;
@@ -482,7 +597,7 @@ export const TimelineBar = React.memo(function TimelineBar({
         <div className={css.plot}>
           <LaneLabels />
           <div className={css.track}>
-            <span className={css.empty}>No timing data</span>
+            <span className={css.empty}>{t(locale, "noTimingData")}</span>
             {hasEarlierRecords && (
               <EarlierHistoryBoundary
                 loading={loadingEarlier}
@@ -490,6 +605,7 @@ export const TimelineBar = React.memo(function TimelineBar({
                   setHover(null);
                 }}
                 onLoad={loadEarlier}
+                locale={locale}
               />
             )}
           </div>
@@ -557,7 +673,14 @@ export const TimelineBar = React.memo(function TimelineBar({
   const onPointerMove = (event: PointerEvent) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const fraction = fractionAt(event);
-    setHover({ fraction, recordIndex: recordIndexAt(event) });
+    const hoveredIndex = recordIndexAt(event);
+    // Over a span the hover line is hidden, so the fraction is irrelevant;
+    // keep the previous state to skip a render while staying on one span.
+    setHover((current) =>
+      hoveredIndex !== null && current?.recordIndex === hoveredIndex
+        ? current
+        : { fraction, recordIndex: hoveredIndex },
+    );
     const pan = panRef.current;
     if (pan !== null && pan.pointerId === event.pointerId) {
       if (Math.abs(event.clientX - pan.anchorClientX) >= MINIMUM_DRAG_PX) {
@@ -728,6 +851,7 @@ export const TimelineBar = React.memo(function TimelineBar({
                 setHover(null);
               }}
               onLoad={loadEarlier}
+              locale={locale}
             />
           )}
           {hover !== null && hover.recordIndex === null && draft === null && (
@@ -795,7 +919,6 @@ export const TimelineBar = React.memo(function TimelineBar({
                   (band.end - band.start) / fullDuration,
                   0.004,
                 );
-                const locale = storedLocale();
                 const title = `${band.bypass ? "⚠ " : ""}${band.skill} · ${
                   band.trigger
                 }${band.open ? ` · ${t(locale, "spanOpen")}` : ""}`;
@@ -898,82 +1021,20 @@ export const TimelineBar = React.memo(function TimelineBar({
             data-timeline-domain
             style={projectedDomainStyle}
           >
-            {model.spans
-              .filter(
-                (span) =>
-                  span.index === selectedIndex ||
-                  (span.end >= domainStart &&
-                    span.start <= domainStart + domainDuration),
-              )
-              .map((span) => {
-                const left = (span.start - model.start) / fullDuration;
-                const width = (span.end - span.start) / fullDuration;
-                const widthPercent = width * 100;
-                const detail = detailByIndex.get(span.index);
-                const ttftMs = detail?.ttftMs;
-                const decodingMs = detail?.decodingMs;
-                const ttftFraction =
-                  ttftMs === undefined ||
-                  decodingMs === undefined ||
-                  ttftMs + decodingMs <= 0
-                    ? null
-                    : ttftMs / (ttftMs + decodingMs);
-                return (
-                  <TooltipSpan
-                    key={span.index}
-                    label={timelineTooltipLabel(span.kind, detail)}
-                    placement="bottom"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={css.span}
-                      data-timeline-span={span.kind}
-                      data-timeline-record-index={span.index}
-                      data-assistant-timing={
-                        ttftFraction === null ? undefined : "true"
-                      }
-                      data-error={span.isError || undefined}
-                      data-equal-duration={mode === "time" || undefined}
-                      data-current={span.index === selectedIndex || undefined}
-                      data-hovered={
-                        hover?.recordIndex === span.index || undefined
-                      }
-                      data-search-match={
-                        searchMatchIndexes === null
-                          ? undefined
-                          : searchMatchIndexes.has(span.index)
-                          ? "true"
-                          : "false"
-                      }
-                      data-selected={
-                        activeRange === null
-                          ? undefined
-                          : span.start <= activeRange.end &&
-                            span.end >= activeRange.start
-                          ? "true"
-                          : "false"
-                      }
-                      style={
-                        {
-                          "--trajectory-span-left": `${left * 100}%`,
-                          "--trajectory-span-width": `${widthPercent}%`,
-                          "--trajectory-span-gap": `min(${
-                            widthPercent * 0.08
-                          }%, 1px)`,
-                          "--trajectory-span-lane": span.lane,
-                          ...(ttftFraction === null
-                            ? {}
-                            : {
-                                "--trajectory-assistant-ttft": `${
-                                  ttftFraction * 100
-                                }%`,
-                              }),
-                        } as CSSProperties
-                      }
-                    />
-                  </TooltipSpan>
-                );
-              })}
+            <TimelineSpans
+              spans={model.spans}
+              modelStart={model.start}
+              fullDuration={fullDuration}
+              domainStart={domainStart}
+              domainDuration={domainDuration}
+              mode={mode}
+              selectedIndex={selectedIndex}
+              hoveredIndex={hover?.recordIndex ?? null}
+              searchMatchIndexes={searchMatchIndexes}
+              activeRange={activeRange}
+              detailByIndex={detailByIndex}
+              locale={locale}
+            />
           </div>
         </div>
       </div>

@@ -81,6 +81,9 @@ export function mergeSessionDetail(
   if (!prev || prev.events.length === 0) return next;
   const bySeq = new Map<number, TraceEvent>();
   for (const event of prev.events) bySeq.set(event.seq, event);
+  // Events are append-only by seq: a poll that brings nothing new keeps
+  // the previous object so turns, search, and the timeline are not rebuilt.
+  if (next.events.every((event) => bySeq.has(event.seq))) return prev;
   for (const event of next.events) bySeq.set(event.seq, event);
   const events = [...bySeq.values()].sort((a, b) => a.seq - b.seq);
   return {

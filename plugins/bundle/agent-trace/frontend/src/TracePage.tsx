@@ -6,7 +6,14 @@
 
 import type * as ReactNS from "react";
 
-import { resolveLocale, storedLocale, t } from "./locale";
+import {
+  resolveLocale,
+  setActiveLocale,
+  statusLabel,
+  storedLocale,
+  t,
+  type TraceLocale,
+} from "./locale";
 import {
   fetchSessionsPage,
   resolveTraceSessionId,
@@ -14,14 +21,23 @@ import {
   type SessionSummary,
 } from "./traceApi";
 import { SessionTraceView } from "./SessionTraceView";
+import { ACCENT, useTraceTheme } from "./theme";
 import {
   formatCount,
   formatRelative,
   formatTime,
   shortId,
-  statusText,
   STATUS_COLORS,
 } from "./uiShared";
+
+/** Enter / Space activate a focusable non-button element. */
+function onActivateKey(action: () => void) {
+  return (event: ReactNS.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    action();
+  };
+}
 
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
@@ -51,8 +67,9 @@ function SessionGroups({
   searching: boolean;
   selected: string | null;
   onSelect: (sessionId: string) => void;
-  locale: string;
+  locale: TraceLocale;
 }) {
+  const accent = ACCENT[useTraceTheme()];
   const multiGroup = groups.length > 1;
   return (
     <>
@@ -63,7 +80,11 @@ function SessionGroups({
           <div key={agent}>
             {multiGroup && (
               <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={!collapsed}
                 onClick={() => onToggleAgent(agent)}
+                onKeyDown={onActivateKey(() => onToggleAgent(agent))}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -96,7 +117,11 @@ function SessionGroups({
                 return (
                   <div
                     key={sessionRef(item)}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={active}
                     onClick={() => onSelect(sessionRef(item))}
+                    onKeyDown={onActivateKey(() => onSelect(sessionRef(item)))}
                     style={{
                       padding: "8px 10px",
                       marginBottom: 4,
@@ -147,7 +172,7 @@ function SessionGroups({
                         color={STATUS_COLORS[item.status] ?? "default"}
                         style={{ marginInlineEnd: 0 }}
                       >
-                        {statusText(item.status)}
+                        {statusLabel(locale, item.status)}
                       </Tag>
                     </div>
                     <div
@@ -170,12 +195,12 @@ function SessionGroups({
                         </span>
                       ) : null}
                       <span>
-                        {item.runs} {t(locale as never, "runs")}
+                        {item.runs} {t(locale, "runs")}
                       </span>
                       <span>{formatCount(item.total_tokens)} tok</span>
                       {item.skills ? (
                         <span
-                          style={{ color: "#2f54eb" }}
+                          style={{ color: accent.skill }}
                           title={Object.entries(item.skills)
                             .sort((a, b) => b[1] - a[1])
                             .map(([name, count]) => `${name} ×${count}`)
@@ -193,7 +218,7 @@ function SessionGroups({
                         style={{ marginLeft: "auto" }}
                         title={formatTime(item.last_event_t)}
                       >
-                        {formatRelative(item.last_event_t)}
+                        {formatRelative(item.last_event_t, locale)}
                       </span>
                     </div>
                   </div>
@@ -214,6 +239,9 @@ export function TracePage() {
     () => resolveLocale(hostLocale ?? storedLocale()),
     [hostLocale],
   );
+  // Published before children render so helpers without a locale prop
+  // (settings popover, inspector) match the page language.
+  setActiveLocale(locale);
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
   const [sessionsHasMore, setSessionsHasMore] = useState(false);
   const [collapsedAgents, setCollapsedAgents] = useState<ReadonlySet<string>>(
@@ -368,6 +396,26 @@ export function TracePage() {
     return [...groups.entries()];
   }, [filteredSessions]);
 
+  // After a delete, move to the neighbouring session in list order
+  // instead of leaving the deleted session's trace on screen.
+  const handleDeleted = useCallback(
+    (deletedRef: string) => {
+      const order = agentGroups.flatMap(([, items]) => items.map(sessionRef));
+      const position = order.indexOf(deletedRef);
+      const next =
+        position < 0
+          ? null
+          : order[position + 1] ?? order[position - 1] ?? null;
+      setSessions(
+        (prev) =>
+          prev?.filter((item) => sessionRef(item) !== deletedRef) ?? prev,
+      );
+      setSelected(next);
+      void loadSessions();
+    },
+    [agentGroups, loadSessions],
+  );
+
   return (
     <div style={{ display: "flex", height: "100%", minHeight: 0 }}>
       {/* Left: session list (collapsible) */}
@@ -501,6 +549,7 @@ export function TracePage() {
         locale={locale}
         onJumpSession={setSelected}
         onRefreshSessions={() => void loadSessions()}
+        onDeleted={handleDeleted}
       />
     </div>
   );

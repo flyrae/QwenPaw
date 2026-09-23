@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.8.7 (2026-09-23)
+
+- **Fix: long sessions crashed the trace page** with ``ReferenceError:
+  process is not defined``. Vite library mode left
+  ``process.env.NODE_ENV`` inside the bundled ``@tanstack/react-virtual``,
+  and the Console has no ``process`` global, so the first virtualized
+  ledger render threw (any session above the virtualization threshold;
+  150 rows before 0.8.4, 80 since). The build now defines it, and the
+  bundle guard fails if an unreplaced ``process.env`` slips back in.
+- **Selection follows you:** selecting a record from the timeline, a
+  search jump, or the keyboard scrolls the ledger to it (virtualized
+  sessions included) and expands a collapsed request or hidden tool
+  calls when the record sits inside one.
+- **Search navigation:** the toolbar shows ``i / n`` (or the match
+  count), with previous/next buttons; Enter / Shift+Enter in the search
+  box jump to the next / previous match.
+- **Keyboard:** ↑/↓ move between ledger records and Esc closes the
+  inspector once the ledger has focus; session list entries and agent
+  group headers are reachable with Tab and open with Enter / Space.
+  Shortcuts are listed in the legend.
+- **Delete:** after deleting a session the page moves to the
+  neighbouring session (or the empty state) instead of leaving the
+  deleted trace on screen.
+- **Language:** relative times, run/session statuses, inspector labels,
+  and timeline tooltips follow the page language; components pick up the
+  host's live locale instead of a possibly stale localStorage value.
+  Projection-mode, lane, and record-kind labels stay in English as
+  before.
+- **Dark mode:** JSON highlighting and the token / reasoning / skill
+  accent colors switch to dark-theme variants (host theme, falling back
+  to the OS preference).
+
+## 0.8.6 (2026-09-23)
+
+- **Frontend:** ledger and timeline callbacks keep a stable identity, so
+  the memoized rows actually skip re-rendering on selection and search
+  (0.8.4's memo was defeated by inline handlers).
+- **Frontend:** a live poll that brings no new events reuses the loaded
+  session, so turns, the search index, and the timeline model are not
+  rebuilt every 5 s while a model call is in flight.
+- **Frontend:** timeline spans render in their own memoized layer; moving
+  the pointer only moves the hover line instead of re-rendering every span
+  and its tooltip.
+- **Frontend:** inspector resize is coalesced to one update per frame and
+  the chosen width is remembered.
+- ``GET /sessions/{id}`` without ``type``/``q`` streams the log and keeps
+  only the requested window instead of loading every event, which is the
+  path the live poll uses.
+
 ## 0.8.5 (2026-09-23)
 
 Ported back from the QwenPaw fork-main integration (PR flyrae/QwenPaw#1)

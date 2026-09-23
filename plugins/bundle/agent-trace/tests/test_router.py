@@ -395,6 +395,18 @@ class TestSessions:
         )
         body = response.json()
         assert [e["seq"] for e in body["events"]] == [1]
+        assert body["total_events"] == 3
+
+    async def test_get_session_tail_window(self, client, service):
+        await seed_session(service)
+        response = await client.get(
+            "/agent-trace/sessions/sess-1",
+            params={"limit": 2},
+        )
+        body = response.json()
+        assert [e["seq"] for e in body["events"]] == [2, 3]
+        assert body["total_events"] == 3
+        assert body["header"]["agent_id"] == "main"
 
     async def test_get_missing_session_404(self, client):
         response = await client.get("/agent-trace/sessions/none")

@@ -2,18 +2,20 @@
 
 import type * as ReactNS from "react";
 
-import { storedLocale, t } from "../locale";
+import { storedLocale, t, tf } from "../locale";
 import type { TrajectoryTimelineMode } from "./timeline";
 
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
 const { Button, Input, Popover, Segmented, Tooltip } = host.antd;
 const {
+  DownOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   QuestionCircleOutlined,
   ReloadOutlined,
   SearchOutlined,
+  UpOutlined,
 } = host.antdIcons;
 
 export interface ToolbarProps {
@@ -21,6 +23,12 @@ export interface ToolbarProps {
   onModeChange: (mode: TrajectoryTimelineMode) => void;
   search: string;
   onSearchChange: (value: string) => void;
+  /** Number of matching records, or null when no search is active. */
+  matchCount: number | null;
+  /** Position of the selected record among the matches, or -1. */
+  matchPosition: number;
+  onNextMatch: () => void;
+  onPrevMatch: () => void;
   onRefresh: () => void;
   modeOptions: { label: string; value: TrajectoryTimelineMode }[];
   allCollapsed: boolean;
@@ -36,6 +44,10 @@ export function Toolbar({
   onModeChange,
   search,
   onSearchChange,
+  matchCount,
+  matchPosition,
+  onNextMatch,
+  onPrevMatch,
   onRefresh,
   modeOptions,
   allCollapsed,
@@ -76,7 +88,52 @@ export function Toolbar({
         onChange={(event: { target: { value: string } }) =>
           onSearchChange(event.target.value)
         }
+        onKeyDown={(event: ReactNS.KeyboardEvent<HTMLInputElement>) => {
+          if (event.key !== "Enter" || !search.trim()) return;
+          event.preventDefault();
+          if (event.shiftKey) onPrevMatch();
+          else onNextMatch();
+        }}
       />
+      {matchCount !== null && (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 2,
+            fontSize: 12,
+            color:
+              matchCount === 0 ? "rgba(255,77,79,1)" : "rgba(128,128,128,1)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {matchCount === 0
+            ? t(locale, "searchNoMatch")
+            : matchPosition >= 0
+            ? `${matchPosition + 1} / ${matchCount}`
+            : tf(locale, "searchMatches", { n: matchCount })}
+          {matchCount > 0 && (
+            <>
+              <Tooltip title={t(locale, "prevMatch")}>
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<UpOutlined />}
+                  onClick={onPrevMatch}
+                />
+              </Tooltip>
+              <Tooltip title={t(locale, "nextMatch")}>
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<DownOutlined />}
+                  onClick={onNextMatch}
+                />
+              </Tooltip>
+            </>
+          )}
+        </span>
+      )}
       {hasRequests && (
         <Tooltip
           title={
@@ -113,6 +170,10 @@ export function Toolbar({
               <div>
                 <strong>{t(locale, "legendBandTitle")}</strong>{" "}
                 {t(locale, "legendBand")}
+              </div>
+              <div>
+                <strong>{t(locale, "legendKeysTitle")}</strong>{" "}
+                {t(locale, "legendKeys")}
               </div>
             </div>
           }
