@@ -9,7 +9,7 @@
 
 import type * as ReactNS from "react";
 
-import { storedLocale, t } from "../locale";
+import { statusLabel, storedLocale, t } from "../locale";
 import { collapseContext, diffLines, diffStats } from "./diff";
 import type { TrajectoryRecord } from "./records";
 import { spanDurationMs } from "./skillSpans";
@@ -22,6 +22,7 @@ import {
   recordKindLabel,
   type ApiPayloadMessage,
 } from "./records";
+import { JSON_PALETTE, useTraceTheme, type TraceTheme } from "../theme";
 import { formatBytes } from "../uiShared";
 
 const host = window.QwenPaw.host;
@@ -137,18 +138,13 @@ export interface RequestSummary {
   };
 }
 
-/** Token colors for the JSON highlighter (theme-neutral). */
-const JSON_COLORS = {
-  key: "#8250df",
-  string: "#0a6e3d",
-  number: "#0550ae",
-  literal: "#cf222e",
-};
-
 /** Regex-based JSON syntax highlighting for short payloads. */
 const HIGHLIGHT_LIMIT = 20000;
 
-function highlightJson(text: string): ReactNS.ReactNode {
+function highlightJson(
+  text: string,
+  colors: (typeof JSON_PALETTE)[TraceTheme],
+): ReactNS.ReactNode {
   if (text.length > HIGHLIGHT_LIMIT) return text;
   const parts: ReactNS.ReactNode[] = [];
   const pattern =
@@ -163,13 +159,13 @@ function highlightJson(text: string): ReactNS.ReactNode {
     const full = match[0];
     let color = "rgba(128,128,128,1)";
     if (match[1] !== undefined) {
-      color = JSON_COLORS.key;
+      color = colors.key;
     } else if (match[2] !== undefined) {
-      color = JSON_COLORS.string;
+      color = colors.string;
     } else if (match[3] !== undefined) {
-      color = JSON_COLORS.number;
+      color = colors.number;
     } else {
-      color = JSON_COLORS.literal;
+      color = colors.literal;
     }
     parts.push(
       <span key={keyIndex++} style={{ color }}>
@@ -184,6 +180,7 @@ function highlightJson(text: string): ReactNS.ReactNode {
 
 function Pre({ value, json = false }: { value: unknown; json?: boolean }) {
   const [copied, setCopied] = useState(false);
+  const palette = JSON_PALETTE[useTraceTheme()];
   const text =
     typeof value === "string" ? value : JSON.stringify(value, null, 2);
   if (!text) return null;
@@ -200,7 +197,7 @@ function Pre({ value, json = false }: { value: unknown; json?: boolean }) {
     <div style={{ position: "relative" }}>
       <a
         onClick={() => void onCopy()}
-        title="Copy"
+        title={t(storedLocale(), "copy")}
         style={{
           position: "absolute",
           top: 4,
@@ -225,7 +222,7 @@ function Pre({ value, json = false }: { value: unknown; json?: boolean }) {
           wordBreak: "break-word",
         }}
       >
-        {json ? highlightJson(text) : text}
+        {json ? highlightJson(text, palette) : text}
       </pre>
     </div>
   );
@@ -286,29 +283,48 @@ function UsageBreakdown({
   cacheWrite: number;
   reasoning: number;
 }) {
+  const locale = storedLocale();
   const other = Math.max(0, input - cacheRead - cacheWrite);
   const content = Math.max(0, output - reasoning);
   return (
     <div>
-      <KeyValue label="Input" value={`${formatTokens(input)} tok`} />
+      <KeyValue
+        label={t(locale, "input")}
+        value={`${formatTokens(input)} tok`}
+      />
       {cacheRead ? (
-        <KeyValue label="Cached" value={`${formatTokens(cacheRead)} tok`} />
+        <KeyValue
+          label={t(locale, "cached")}
+          value={`${formatTokens(cacheRead)} tok`}
+        />
       ) : null}
       {cacheWrite ? (
         <KeyValue
-          label="Cache created"
+          label={t(locale, "cacheCreated")}
           value={`${formatTokens(cacheWrite)} tok`}
         />
       ) : null}
       {cacheRead || cacheWrite ? (
-        <KeyValue label="Other" value={`${formatTokens(other)} tok`} />
+        <KeyValue
+          label={t(locale, "roleOther")}
+          value={`${formatTokens(other)} tok`}
+        />
       ) : null}
-      <KeyValue label="Output" value={`${formatTokens(output)} tok`} />
+      <KeyValue
+        label={t(locale, "output")}
+        value={`${formatTokens(output)} tok`}
+      />
       {reasoning ? (
-        <KeyValue label="Reasoning" value={`${formatTokens(reasoning)} tok`} />
+        <KeyValue
+          label={t(locale, "reasoningShort")}
+          value={`${formatTokens(reasoning)} tok`}
+        />
       ) : null}
       {reasoning ? (
-        <KeyValue label="Content" value={`${formatTokens(content)} tok`} />
+        <KeyValue
+          label={t(locale, "contentTokens")}
+          value={`${formatTokens(content)} tok`}
+        />
       ) : null}
     </div>
   );
@@ -499,24 +515,36 @@ function RequestInspector({
       label: t(locale, "summary"),
       children: (
         <div>
-          <KeyValue label="Request" value={`#${request.turn}`} />
+          <KeyValue
+            label={t(locale, "requestTab")}
+            value={`#${request.turn}`}
+          />
           <KeyValue
             label={t(locale, "status")}
-            value={request.status || "unknown"}
+            value={statusLabel(locale, request.status)}
             danger={request.status === "error"}
           />
-          <KeyValue label="Query" value={firstLineOf(request.query)} />
+          <KeyValue
+            label={t(locale, "query")}
+            value={firstLineOf(request.query)}
+          />
           {request.providers.length > 0 ? (
-            <KeyValue label="Provider" value={request.providers.join(" · ")} />
+            <KeyValue
+              label={t(locale, "provider")}
+              value={request.providers.join(" · ")}
+            />
           ) : null}
           <KeyValue
             label={t(locale, "model")}
             value={request.models.join(", ") || "-"}
           />
-          <KeyValue label="Tool calls" value={String(request.toolCalls)} />
+          <KeyValue
+            label={t(locale, "toolCalls")}
+            value={String(request.toolCalls)}
+          />
           {request.errors.length > 0 ? (
             <KeyValue
-              label="Error"
+              label={t(locale, "error")}
               value={request.errors.join("; ").slice(0, 120)}
               danger
             />
@@ -527,19 +555,28 @@ function RequestInspector({
                 style={{ fontSize: 12 }}
                 onClick={() => onJumpRecord(request.resultIndex as number)}
               >
-                Result: Assistant Message →
+                {t(locale, "jumpToResult")}
               </a>
             </div>
           ) : null}
           {request.options ? (
-            <OverviewSection label="Options" onOpen={() => setTab("options")}>
+            <OverviewSection
+              label={t(locale, "optionsTab")}
+              onOpen={() => setTab("options")}
+            >
               <Pre value={request.options} json />
             </OverviewSection>
           ) : null}
-          <OverviewSection label="Usage" onOpen={() => setTab("usage")}>
+          <OverviewSection
+            label={t(locale, "usage")}
+            onOpen={() => setTab("usage")}
+          >
             {usageRows}
           </OverviewSection>
-          <OverviewSection label="Timing" onOpen={() => setTab("timing")}>
+          <OverviewSection
+            label={t(locale, "timing")}
+            onOpen={() => setTab("timing")}
+          >
             {timingRows}
           </OverviewSection>
         </div>
@@ -547,7 +584,7 @@ function RequestInspector({
     },
     {
       key: "usage",
-      label: "Usage",
+      label: t(locale, "usage"),
       children: (
         <div>
           <Text strong style={{ fontSize: 12 }}>
@@ -577,14 +614,14 @@ function RequestInspector({
     },
     {
       key: "timing",
-      label: "Timing",
+      label: t(locale, "timing"),
       children: timingRows,
     },
     ...(request.options
       ? [
           {
             key: "options",
-            label: "Options",
+            label: t(locale, "optionsTab"),
             children: <Pre value={request.options} json />,
           },
         ]
@@ -713,8 +750,11 @@ function HeaderInspector({ record }: { record: TrajectoryRecord }) {
             }
           />
           <KeyValue label="SHA" value={record.sha ?? "-"} />
-          <KeyValue label="Chars" value={String(record.prompt?.length ?? 0)} />
-          <KeyValue label="Tools" value={String(tools.length)} />
+          <KeyValue
+            label={t(locale, "charCount")}
+            value={String(record.prompt?.length ?? 0)}
+          />
+          <KeyValue label={t(locale, "tools")} value={String(tools.length)} />
         </div>
       ),
     },
@@ -741,7 +781,7 @@ function HeaderInspector({ record }: { record: TrajectoryRecord }) {
       ? [
           {
             key: "tools",
-            label: "Tools",
+            label: t(locale, "tools"),
             children: (
               <div style={{ paddingTop: 4 }}>
                 {tools.map((name) => (
@@ -781,7 +821,7 @@ function HeaderInspector({ record }: { record: TrajectoryRecord }) {
       : []),
     {
       key: "raw",
-      label: "Raw",
+      label: t(locale, "rawTab"),
       children: <Pre value={record.raw} />,
     },
   ];
@@ -916,7 +956,10 @@ export function Inspector({
     children: (
       <div>
         <KeyValue label="#" value={String(selected.index)} />
-        <KeyValue label="Kind" value={recordKindLabel(selected, locale)} />
+        <KeyValue
+          label={t(locale, "kind")}
+          value={recordKindLabel(selected, locale)}
+        />
         {selected.runIndex > 0 && onSelectTurn ? (
           <div style={{ padding: "3px 0", textAlign: "right" }}>
             <a
@@ -939,13 +982,13 @@ export function Inspector({
           danger={selected.isError}
         />
         {selected.provider ? (
-          <KeyValue label="Provider" value={selected.provider} />
+          <KeyValue label={t(locale, "provider")} value={selected.provider} />
         ) : null}
         {selected.model ? (
           <KeyValue label={t(locale, "model")} value={selected.model} />
         ) : null}
         {selected.toolName ? (
-          <KeyValue label="Tool" value={selected.toolName} />
+          <KeyValue label={t(locale, "tool")} value={selected.toolName} />
         ) : null}
         {selected.inSkill ? (
           <KeyValue
@@ -1430,14 +1473,14 @@ export function Inspector({
             <Text type="secondary" style={{ fontSize: 11 }}>
               {t(locale, "apiPayloadNote")}
             </Text>
-            <KeyValue label="Model" value={ap.model} />
+            <KeyValue label={t(locale, "model")} value={ap.model} />
             <KeyValue
               label={t(locale, "apiMsgCount")}
               value={String(ap.messages.length)}
             />
             {ap.usage ? (
               <KeyValue
-                label="Usage"
+                label={t(locale, "usage")}
                 value={`in ${ap.usage.input_tokens ?? 0} · out ${
                   ap.usage.output_tokens ?? 0
                 } tok`}
@@ -1573,19 +1616,25 @@ export function Inspector({
   if (selected.startedAt !== null || usage || timing) {
     items.push({
       key: "timing",
-      label: "Timing",
+      label: t(locale, "timing"),
       children: (
         <div>
-          <KeyValue label="Started" value={formatEpochMs(selected.startedAt)} />
-          <KeyValue label="Total" value={formatSeconds(selected.timeSeconds)} />
+          <KeyValue
+            label={t(locale, "startedAt")}
+            value={formatEpochMs(selected.startedAt)}
+          />
+          <KeyValue
+            label={t(locale, "duration")}
+            value={formatSeconds(selected.timeSeconds)}
+          />
           {timing ? (
             <>
               <KeyValue
-                label="TTFT"
+                label={t(locale, "ttftLabel")}
                 value={formatSeconds(timing.ttft_ms / 1000)}
               />
               <KeyValue
-                label="Decoding"
+                label={t(locale, "decodeLabel")}
                 value={formatSeconds(timing.decode_ms / 1000)}
               />
               <KeyValue
@@ -1608,28 +1657,40 @@ export function Inspector({
   if (usage) {
     items.push({
       key: "usage",
-      label: "Usage",
+      label: t(locale, "usage"),
       children: (
         <div>
-          <KeyValue label="Input" value={formatTokens(usage.input_tokens)} />
-          <KeyValue label="Output" value={formatTokens(usage.output_tokens)} />
+          <KeyValue
+            label={t(locale, "input")}
+            value={formatTokens(usage.input_tokens)}
+          />
+          <KeyValue
+            label={t(locale, "output")}
+            value={formatTokens(usage.output_tokens)}
+          />
           {usage.cache_creation_input_tokens ? (
             <KeyValue
-              label="Cache write"
+              label={t(locale, "cacheCreated")}
               value={formatTokens(usage.cache_creation_input_tokens)}
             />
           ) : null}
           {usage.cache_input_tokens ? (
             <KeyValue
-              label="Cache read"
+              label={t(locale, "cached")}
               value={formatTokens(usage.cache_input_tokens)}
             />
           ) : null}
           {usage.total_tokens !== undefined ? (
-            <KeyValue label="Total" value={formatTokens(usage.total_tokens)} />
+            <KeyValue
+              label={t(locale, "total")}
+              value={formatTokens(usage.total_tokens)}
+            />
           ) : null}
           {usage.time !== undefined ? (
-            <KeyValue label="API time" value={formatSeconds(usage.time)} />
+            <KeyValue
+              label={t(locale, "apiTime")}
+              value={formatSeconds(usage.time)}
+            />
           ) : null}
         </div>
       ),
@@ -1637,7 +1698,7 @@ export function Inspector({
   }
   items.push({
     key: "rawjson",
-    label: "Raw",
+    label: t(locale, "rawTab"),
     children: <Pre value={selected.raw} />,
   });
 

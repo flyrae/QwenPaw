@@ -3,6 +3,8 @@
  * trace page and the docked chat panel. No host dependencies.
  */
 
+import { tf, t, type TraceLocale } from "./locale";
+
 export function shortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
@@ -14,15 +16,22 @@ export function formatTime(iso: string | null | undefined): string {
   return date.toLocaleString();
 }
 
-export function formatRelative(iso: string | null | undefined): string {
+export function formatRelative(
+  iso: string | null | undefined,
+  locale: TraceLocale,
+): string {
   if (!iso) return "-";
   const value = Date.parse(iso);
   if (!Number.isFinite(value)) return iso;
   const delta = Date.now() - value;
-  if (delta < 60_000) return "刚刚";
-  if (delta < 3_600_000) return `${Math.floor(delta / 60_000)} 分钟前`;
-  if (delta < 86_400_000) return `${Math.floor(delta / 3_600_000)} 小时前`;
-  return new Date(value).toLocaleString();
+  if (delta < 60_000) return t(locale, "justNow");
+  if (delta < 3_600_000) {
+    return tf(locale, "minutesAgo", { n: Math.floor(delta / 60_000) });
+  }
+  if (delta < 86_400_000) {
+    return tf(locale, "hoursAgo", { n: Math.floor(delta / 3_600_000) });
+  }
+  return new Date(value).toLocaleString(locale);
 }
 
 export function formatCount(n: number): string {
@@ -43,9 +52,6 @@ export const STATUS_COLORS: Record<string, string> = {
   success: "success",
   error: "error",
   cancelled: "warning",
+  interrupted: "default",
   unknown: "default",
 };
-
-export function statusText(status: string): string {
-  return status || "unknown";
-}

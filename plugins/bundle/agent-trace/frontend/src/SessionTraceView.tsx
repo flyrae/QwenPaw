@@ -6,7 +6,13 @@
 
 import type * as ReactNS from "react";
 
-import { resolveLocale, storedLocale, t, type TraceLocale } from "./locale";
+import {
+  resolveLocale,
+  statusLabel,
+  storedLocale,
+  t,
+  type TraceLocale,
+} from "./locale";
 import {
   ApiError,
   deleteSessionRemote,
@@ -43,13 +49,7 @@ import {
   type TrajectoryTimelineMode,
 } from "./trajectory/timeline";
 import { Toolbar } from "./trajectory/Toolbar";
-import {
-  formatBytes,
-  formatCount,
-  shortId,
-  statusText,
-  STATUS_COLORS,
-} from "./uiShared";
+import { formatBytes, formatCount, shortId, STATUS_COLORS } from "./uiShared";
 
 /** Fields the inspector can show — used as the AND-search haystack. */
 function recordHaystack(record: TrajectoryRecord): string {
@@ -184,6 +184,8 @@ export interface SessionTraceViewProps {
   onJumpSession: (sessionId: string) => void;
   /** Called on toolbar refresh so the parent can reload its session list. */
   onRefreshSessions?: () => void;
+  /** Called after this session was deleted so the parent can move on. */
+  onDeleted?: (sessionId: string) => void;
 }
 
 /**
@@ -196,6 +198,7 @@ export function SessionTraceView({
   locale,
   onJumpSession,
   onRefreshSessions,
+  onDeleted,
 }: SessionTraceViewProps) {
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -370,6 +373,97 @@ export function SessionTraceView({
         : records.find((record) => record.index === selectedIndex) ?? null,
     [records, selectedIndex],
   );
+
+  // A record selected from the timeline or a search jump may sit in a
+  // collapsed request or behind the "hide tool calls" toggle; reveal it so
+  // the ledger can scroll to it. Keyed on the selection only, so a poll
+  // does not re-expand a request the user collapsed afterwards.
+  const recordsRef = useRef(records);
+  recordsRef.current = records;
+  useEffect(() => {
+    if (selectedIndex === null) return;
+    const record = recordsRef.current.find(
+      (item) => item.index === selectedIndex,
+    );
+    if (!record) return;
+    setCollapsedTurns((prev) => {
+      if (!prev.has(record.runIndex)) return prev;
+      const next = new Set(prev);
+      next.delete(record.runIndex);
+      return next;
+    });
+    if (record.kind === "tool") setCallsCollapsed(false);
+  }, [selectedIndex]);
+
+  // Search matches in ledger order, for the "i / n" counter and jumps.
+  const searchMatchOrder = useMemo(
+    () =>
+      searchMatchIndexes === null
+        ? []
+        : records
+            .filter((record) => searchMatchIndexes.has(record.index))
+            .map((record) => record.index),
+    [records, searchMatchIndexes],
+  );
+  const matchPosition =
+    selectedIndex === null ? -1 : searchMatchOrder.indexOf(selectedIndex);
+
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
+  const pendingJumpRef = useRef<1 | -1 | null>(null);
+
+  const moveToMatch = useCallback((step: 1 | -1, order: number[]) => {
+    if (order.length === 0) return;
+    const current = selectedIndexRef.current;
+    const position = current === null ? -1 : order.indexOf(current);
+    let target: number;
+    if (position >= 0) {
+      target = order[(position + step + order.length) % order.length];
+    } else {
+      // Not on a match: continue from the selected record's place in the
+      // ledger instead of restarting at the first match.
+      const rank = new Map(
+        recordsRef.current.map((record, i) => [record.index, i]),
+      );
+      const at = current === null ? -1 : rank.get(current) ?? -1;
+      target =
+        step > 0
+          ? order.find((index) => (rank.get(index) ?? 0) > at) ?? order[0]
+          : [...order].reverse().find((index) => (rank.get(index) ?? 0) < at) ??
+            order[order.length - 1];
+    }
+    setSelectedIndex(target);
+    setSelectedTurn(null);
+  }, []);
+
+  const eventSearchRef = useRef(eventSearch);
+  eventSearchRef.current = eventSearch;
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+  const searchMatchOrderRef = useRef(searchMatchOrder);
+  searchMatchOrderRef.current = searchMatchOrder;
+
+  const jumpToMatch = useCallback(
+    (step: 1 | -1) => {
+      const typed = eventSearchRef.current;
+      if (typed.trim() !== searchQueryRef.current.trim()) {
+        // Enter pressed before the debounce settled: apply the query now
+        // and jump once its matches are computed.
+        pendingJumpRef.current = step;
+        setSearchQuery(typed);
+        return;
+      }
+      moveToMatch(step, searchMatchOrderRef.current);
+    },
+    [moveToMatch],
+  );
+
+  useEffect(() => {
+    const step = pendingJumpRef.current;
+    if (step === null) return;
+    pendingJumpRef.current = null;
+    moveToMatch(step, searchMatchOrder);
+  }, [moveToMatch, searchMatchOrder]);
 
   const requestSummary = useMemo<RequestSummary | null>(() => {
     if (selectedTurn === null) return null;
@@ -680,6 +774,12 @@ export function SessionTraceView({
     [turns],
   );
 
+  const closeAllInspectors = useCallback(() => {
+    setSelectedSpanId(null);
+    setSelectedIndex(null);
+    setSelectedTurn(null);
+  }, []);
+
   return (
     <div
       style={{
@@ -723,7 +823,7 @@ export function SessionTraceView({
                 color={STATUS_COLORS[summary?.status ?? ""] ?? "default"}
                 style={{ marginInlineEnd: 0, flexShrink: 0 }}
               >
-                {statusText(summary?.status ?? "unknown")}
+                {statusLabel(locale, summary?.status ?? "unknown")}
               </Tag>
               {summary?.channel ? (
                 <Text type="secondary" style={{ fontSize: 11, flexShrink: 0 }}>
@@ -759,7 +859,8 @@ export function SessionTraceView({
                         void deleteSessionRemote(sessionId)
                           .then(() => {
                             message.success(t(locale, "deleted"));
-                            onRefreshSessions?.();
+                            if (onDeleted) onDeleted(sessionId);
+                            else onRefreshSessions?.();
                           })
                           .catch((exc: Error) =>
                             message.error(String(exc.message)),
@@ -851,6 +952,12 @@ export function SessionTraceView({
         onModeChange={setMode}
         search={eventSearch}
         onSearchChange={setEventSearch}
+        matchCount={
+          searchMatchIndexes === null ? null : searchMatchOrder.length
+        }
+        matchPosition={matchPosition}
+        onNextMatch={() => jumpToMatch(1)}
+        onPrevMatch={() => jumpToMatch(-1)}
         onRefresh={() => {
           if (sessionId) {
             void loadDetail(sessionId);
@@ -892,6 +999,7 @@ export function SessionTraceView({
         onRecordSelect={setSelectedIndex}
         onRecordFocus={setSelectedIndex}
         onSkillSpanSelect={setSelectedSpanId}
+        locale={locale}
       />
       {detailLoading && !detail ? (
         <div style={{ textAlign: "center", paddingTop: 64 }}>
@@ -935,6 +1043,8 @@ export function SessionTraceView({
               onLoadOlder={loadOlderRows}
               emptyText={t(locale, "noSessions")}
               initialRecord={initialHeader}
+              locale={locale}
+              onEscape={closeAllInspectors}
             />
           </div>
           {selectedSpan ? (

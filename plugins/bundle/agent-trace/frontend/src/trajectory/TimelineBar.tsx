@@ -26,7 +26,7 @@ import {
   type TrajectoryTimelineSpan,
   type TrajectoryTimeRange,
 } from "./timeline";
-import { storedLocale, t } from "../locale";
+import { t, type TraceLocale } from "../locale";
 
 ensureTimelineStyles();
 
@@ -110,27 +110,29 @@ function timelineKindLabel(kind: RecordKind): string {
 function timelineTooltipLabel(
   kind: RecordKind,
   detail: TimelineRecordDetail | undefined,
+  locale: TraceLocale,
 ): string {
   const heading = timelineKindLabel(kind);
   if (detail === undefined) return heading;
   const duration =
     detail.durationMs === undefined
       ? null
-      : `Total ${formatTimelineOffset(detail.durationMs)}`;
+      : `${t(locale, "duration")} ${formatTimelineOffset(detail.durationMs)}`;
   const range =
     detail.startedAt === undefined
       ? null
       : detail.durationMs === undefined
-      ? `Started ${formatEpochMs(detail.startedAt)}`
+      ? `${t(locale, "startedAt")} ${formatEpochMs(detail.startedAt)}`
       : `${formatEpochMs(detail.startedAt)} → ${formatEpochMs(
           detail.startedAt + detail.durationMs,
         )}`;
   const segments =
     detail.ttftMs === undefined || detail.decodingMs === undefined
       ? null
-      : `TTFT ${formatTimelineOffset(
-          detail.ttftMs,
-        )} · Decoding ${formatTimelineOffset(detail.decodingMs)}`;
+      : `${t(locale, "ttftLabel")} ${formatTimelineOffset(detail.ttftMs)} · ${t(
+          locale,
+          "decodeLabel",
+        )} ${formatTimelineOffset(detail.decodingMs)}`;
   const timing = [duration, segments]
     .filter((value) => value !== null)
     .join(" · ");
@@ -158,6 +160,7 @@ export interface TimelineBarProps {
   onRecordFocus?: (index: number) => void;
   /** Open the inspector for a clicked skill band. */
   onSkillSpanSelect?: (spanId: string) => void;
+  locale: TraceLocale;
 }
 
 function orderedRange(left: number, right: number): FractionRange {
@@ -237,26 +240,25 @@ function EarlierHistoryBoundary({
   loading,
   onHover,
   onLoad,
+  locale,
 }: {
   loading: boolean;
   onHover: () => void;
   onLoad: (() => void) | undefined;
+  locale: TraceLocale;
 }) {
+  const label = t(
+    locale,
+    loading ? "loadingEarlierHistory" : "loadEarlierHistory",
+  );
   return (
-    <TooltipSpan
-      label={
-        loading ? "Loading earlier history…" : "Click to load earlier history"
-      }
-      placement="right"
-    >
+    <TooltipSpan label={label} placement="right">
       <button
         type="button"
         className={css.earlierHistory}
         data-earlier-history
         data-loading={loading || undefined}
-        aria-label={
-          loading ? "Loading earlier history" : "Load earlier history"
-        }
+        aria-label={label}
         aria-disabled={loading || onLoad === undefined}
         onClick={onLoad}
         onPointerEnter={(event: ReactNS.PointerEvent<HTMLButtonElement>) => {
@@ -292,6 +294,7 @@ const TimelineSpans = React.memo(function TimelineSpans({
   searchMatchIndexes,
   activeRange,
   detailByIndex,
+  locale,
 }: {
   spans: readonly TrajectoryTimelineSpan[];
   modelStart: number;
@@ -304,6 +307,7 @@ const TimelineSpans = React.memo(function TimelineSpans({
   searchMatchIndexes: ReadonlySet<number> | null;
   activeRange: TrajectoryTimeRange | null;
   detailByIndex: ReadonlyMap<number, TimelineRecordDetail>;
+  locale: TraceLocale;
 }) {
   return (
     <>
@@ -330,7 +334,7 @@ const TimelineSpans = React.memo(function TimelineSpans({
           return (
             <TooltipSpan
               key={span.index}
-              label={timelineTooltipLabel(span.kind, detail)}
+              label={timelineTooltipLabel(span.kind, detail, locale)}
               placement="bottom"
             >
               <span
@@ -398,6 +402,7 @@ export const TimelineBar = React.memo(function TimelineBar({
   onRecordSelect,
   onRecordFocus,
   onSkillSpanSelect,
+  locale,
 }: TimelineBarProps) {
   const hostTheme =
     typeof host.useTheme === "function" ? host.useTheme() : undefined;
@@ -592,7 +597,7 @@ export const TimelineBar = React.memo(function TimelineBar({
         <div className={css.plot}>
           <LaneLabels />
           <div className={css.track}>
-            <span className={css.empty}>No timing data</span>
+            <span className={css.empty}>{t(locale, "noTimingData")}</span>
             {hasEarlierRecords && (
               <EarlierHistoryBoundary
                 loading={loadingEarlier}
@@ -600,6 +605,7 @@ export const TimelineBar = React.memo(function TimelineBar({
                   setHover(null);
                 }}
                 onLoad={loadEarlier}
+                locale={locale}
               />
             )}
           </div>
@@ -845,6 +851,7 @@ export const TimelineBar = React.memo(function TimelineBar({
                 setHover(null);
               }}
               onLoad={loadEarlier}
+              locale={locale}
             />
           )}
           {hover !== null && hover.recordIndex === null && draft === null && (
@@ -912,7 +919,6 @@ export const TimelineBar = React.memo(function TimelineBar({
                   (band.end - band.start) / fullDuration,
                   0.004,
                 );
-                const locale = storedLocale();
                 const title = `${band.bypass ? "⚠ " : ""}${band.skill} · ${
                   band.trigger
                 }${band.open ? ` · ${t(locale, "spanOpen")}` : ""}`;
@@ -1027,6 +1033,7 @@ export const TimelineBar = React.memo(function TimelineBar({
               searchMatchIndexes={searchMatchIndexes}
               activeRange={activeRange}
               detailByIndex={detailByIndex}
+              locale={locale}
             />
           </div>
         </div>

@@ -12,8 +12,9 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type * as ReactNS from "react";
 
-import { storedLocale, t } from "../locale";
+import { statusLabel, t } from "../locale";
 import type { TraceLocale, TraceStringKey } from "../locale";
+import { ACCENT, useTraceTheme } from "../theme";
 import type {
   MarkerKind,
   TrajectoryRecord,
@@ -23,7 +24,7 @@ import { formatSeconds, formatTokens, recordKindLabel } from "./records";
 
 const host = window.QwenPaw.host;
 const React: typeof ReactNS = host.React;
-const { useCallback, useRef } = React;
+const { useCallback, useEffect, useRef } = React;
 const { Tag, Tooltip } = host.antd;
 const { Text } = host.antd.Typography;
 const {
@@ -74,27 +75,12 @@ const STATUS_COLORS: Record<string, string> = {
   unknown: "default",
 };
 
-const STATUS_LABELS: Record<string, { zh: string; en: string }> = {
-  running: { zh: "进行中", en: "Running" },
-  success: { zh: "成功", en: "Success" },
-  error: { zh: "错误", en: "Error" },
-  cancelled: { zh: "已取消", en: "Cancelled" },
-  interrupted: { zh: "已中断", en: "Interrupted" },
-  unknown: { zh: "未知", en: "Unknown" },
-};
-
 /** Windowed rendering kicks in beyond this many rows. */
 const VIRTUALIZE_THRESHOLD = 80;
 const ROW_HEIGHT = 26;
 const BOUNDARY_HEIGHT = 34;
 const DIVIDER_HEIGHT = 9;
 const LOAD_OLDER_HEIGHT = 30;
-
-function statusLabel(status: string): string {
-  const locale = storedLocale();
-  const entry = STATUS_LABELS[status] ?? STATUS_LABELS.unknown;
-  return locale === "zh-CN" ? entry.zh : entry.en;
-}
 
 const PART_TYPE_KEYS: Record<string, TraceStringKey> = {
   ImageContent: "image",
@@ -154,6 +140,9 @@ export interface LedgerProps {
   emptyText?: string;
   /** Open the span inspector for a skill used in a request pill. */
   onSkillSpanOpen?: (skill: string, turn: number | null) => void;
+  locale: TraceLocale;
+  /** Escape pressed while the ledger has focus. */
+  onEscape?: () => void;
 }
 
 const RecordRow = React.memo(function RecordRow({
@@ -161,6 +150,7 @@ const RecordRow = React.memo(function RecordRow({
   selected,
   dimmed,
   multiRequest,
+  locale,
   onSelectRecord,
   onOpenRun,
 }: {
@@ -168,9 +158,11 @@ const RecordRow = React.memo(function RecordRow({
   selected: boolean;
   dimmed: boolean;
   multiRequest: boolean;
+  locale: TraceLocale;
   onSelectRecord: (index: number) => void;
   onOpenRun?: (runIndex: number) => void;
 }) {
+  const accent = ACCENT[useTraceTheme()];
   const usage = record.usage;
   const tokens =
     usage && (usage.input_tokens || usage.output_tokens)
@@ -196,9 +188,7 @@ const RecordRow = React.memo(function RecordRow({
             : null,
           `Output ${formatTokens(usage.output_tokens)} tok`,
           reasoning
-            ? `${t(storedLocale(), "reasoningShort")} ${formatTokens(
-                reasoning,
-              )} tok`
+            ? `${t(locale, "reasoningShort")} ${formatTokens(reasoning)} tok`
             : null,
         ]
           .filter(Boolean)
@@ -242,7 +232,7 @@ const RecordRow = React.memo(function RecordRow({
       >
         {multiRequest && onOpenRun ? (
           <span
-            title={t(storedLocale(), "runViewHint")}
+            title={t(locale, "runViewHint")}
             onClick={(event: ReactNS.MouseEvent<HTMLSpanElement>) => {
               event.stopPropagation();
               onOpenRun(record.runIndex);
@@ -284,8 +274,8 @@ const RecordRow = React.memo(function RecordRow({
         }}
       >
         {record.kind === "tool" && record.skillName
-          ? t(storedLocale(), "skillLoadKind")
-          : recordKindLabel(record, storedLocale())}
+          ? t(locale, "skillLoadKind")
+          : recordKindLabel(record, locale)}
       </Tag>
       {record.kind === "message" &&
       record.model &&
@@ -312,7 +302,7 @@ const RecordRow = React.memo(function RecordRow({
           title={
             record.inSkillLoaded
               ? record.inSkill
-              : `${record.inSkill} — ${t(storedLocale(), "skillBypass")}`
+              : `${record.inSkill} — ${t(locale, "skillBypass")}`
           }
           style={{
             marginInlineEnd: 0,
@@ -331,8 +321,8 @@ const RecordRow = React.memo(function RecordRow({
         <Tooltip
           title={`${record.guidedSkill} — ${
             record.guidedReason === "slash"
-              ? t(storedLocale(), "guidedBySlash")
-              : t(storedLocale(), "guidedByLoad")
+              ? t(locale, "guidedBySlash")
+              : t(locale, "guidedByLoad")
           }`}
         >
           {/* Inference is deliberately quiet: plain colored text, no
@@ -345,7 +335,7 @@ const RecordRow = React.memo(function RecordRow({
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
-              color: "#2f54eb",
+              color: accent.skill,
             }}
           >
             ∈{record.guidedSkill}
@@ -382,7 +372,7 @@ const RecordRow = React.memo(function RecordRow({
       >
         {record.receipt ? (
           <Text type="secondary" style={{ fontSize: 12 }}>
-            {receiptLabel(record, storedLocale())}
+            {receiptLabel(record, locale)}
           </Text>
         ) : record.kind === "tool" && record.skillName ? (
           <>
@@ -395,9 +385,9 @@ const RecordRow = React.memo(function RecordRow({
               </Text>
             ) : record.toolOutputChars ? (
               <Text type="secondary" style={{ fontSize: 12 }}>
-                {` · ${t(storedLocale(), "skillLoaded")} ${formatTokens(
+                {` · ${t(locale, "skillLoaded")} ${formatTokens(
                   record.toolOutputChars,
-                )} ${t(storedLocale(), "charUnit")}`}
+                )} ${t(locale, "charUnit")}`}
               </Text>
             ) : null}
           </>
@@ -427,7 +417,7 @@ const RecordRow = React.memo(function RecordRow({
             {record.kind === "user" ? (
               <>
                 <Text type="secondary" style={{ fontSize: 11 }}>{` ${
-                  mediaPartsLabel(record, storedLocale()) ?? ""
+                  mediaPartsLabel(record, locale) ?? ""
                 }`}</Text>
                 {record.channel && record.channel !== "console" ? (
                   <Text code style={{ fontSize: 10 }}>
@@ -450,9 +440,9 @@ const RecordRow = React.memo(function RecordRow({
       >
         {tokens ? (
           <span title={tokenTitle}>
-            <span style={{ color: "#1677ff" }}>{tokens}</span>
+            <span style={{ color: accent.tokens }}>{tokens}</span>
             {reasoning ? (
-              <span style={{ color: "#722ed1" }}>
+              <span style={{ color: accent.reasoning }}>
                 {` · ${formatTokens(reasoning)}`}
               </span>
             ) : null}
@@ -474,6 +464,7 @@ const BoundaryRow = React.memo(function BoundaryRow({
   onToggleTurn,
   onSelectTurn,
   onSkillSpanOpen,
+  locale,
 }: {
   turn: TrajectoryTurnModel;
   collapsed: boolean;
@@ -482,8 +473,8 @@ const BoundaryRow = React.memo(function BoundaryRow({
   onToggleTurn: (turn: number) => void;
   onSelectTurn: (turn: number) => void;
   onSkillSpanOpen?: (skill: string, turn: number | null) => void;
+  locale: TraceLocale;
 }) {
-  const locale = storedLocale();
   return (
     <div
       style={{ display: "flex", alignItems: "center", height: BOUNDARY_HEIGHT }}
@@ -565,7 +556,7 @@ const BoundaryRow = React.memo(function BoundaryRow({
           color={STATUS_COLORS[turn.status] ?? "default"}
           style={{ marginInlineEnd: 0, fontSize: 10, lineHeight: "16px" }}
         >
-          {statusLabel(turn.status)}
+          {statusLabel(locale, turn.status)}
         </Tag>
       </span>
     </div>
@@ -590,9 +581,12 @@ export function Ledger({
   initialRecord,
   emptyText,
   onSkillSpanOpen,
+  locale,
+  onEscape,
 }: LedgerProps) {
-  const locale = storedLocale();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollToRowRef = useRef<((rowIndex: number) => void) | null>(null);
+  const pendingScrollRef = useRef<number | null>(null);
   const visibleTurns = React.useMemo(
     () => turns.filter((turn) => turn.turn !== null),
     [turns],
@@ -706,6 +700,7 @@ export function Ledger({
               selected={selectedIndex === record.index}
               dimmed={dimFor(record)}
               multiRequest={multiRequest}
+              locale={locale}
               onSelectRecord={onSelectedIndexChange}
               onOpenRun={onSelectedTurnChange}
             />
@@ -723,6 +718,7 @@ export function Ledger({
               onToggleTurn={onToggleTurn}
               onSelectTurn={onSelectedTurnChange}
               onSkillSpanOpen={onSkillSpanOpen}
+              locale={locale}
             />
           );
         }
@@ -735,6 +731,7 @@ export function Ledger({
               selected={selectedIndex === record.index}
               dimmed={dimFor(record)}
               multiRequest={multiRequest}
+              locale={locale}
               onSelectRecord={onSelectedIndexChange}
               onOpenRun={onSelectedTurnChange}
             />
@@ -757,6 +754,56 @@ export function Ledger({
       selectedTurn,
     ],
   );
+
+  const virtualized = rows.length > VIRTUALIZE_THRESHOLD;
+
+  // Reveal the selected row once per selection change (timeline clicks,
+  // search jumps, arrow keys). The row may appear only after the parent
+  // expands a collapsed request, so the target stays pending until then.
+  useEffect(() => {
+    pendingScrollRef.current = selectedIndex;
+  }, [selectedIndex]);
+  useEffect(() => {
+    const target = pendingScrollRef.current;
+    if (target === null) return;
+    const rowIndex = rows.findIndex((row) => row.record?.index === target);
+    if (rowIndex < 0) return;
+    pendingScrollRef.current = null;
+    if (virtualized) {
+      scrollToRowRef.current?.(rowIndex);
+      return;
+    }
+    scrollRef.current
+      ?.querySelector(`[data-row-key="${rows[rowIndex].key}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [rows, selectedIndex, virtualized]);
+
+  const onKeyDown = (event: ReactNS.KeyboardEvent<HTMLDivElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === "Escape") {
+      if (onEscape) {
+        event.preventDefault();
+        onEscape();
+      }
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const recordRows = rows.filter((row) => row.record !== undefined);
+    if (recordRows.length === 0) return;
+    event.preventDefault();
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    const position = recordRows.findIndex(
+      (row) => row.record?.index === selectedIndex,
+    );
+    const nextPosition =
+      position < 0
+        ? step > 0
+          ? 0
+          : recordRows.length - 1
+        : Math.min(recordRows.length - 1, Math.max(0, position + step));
+    if (nextPosition === position) return;
+    onSelectedIndexChange(recordRows[nextPosition].record!.index);
+  };
 
   if (rows.length === 0) {
     return (
@@ -781,24 +828,33 @@ export function Ledger({
     );
   }
 
-  const body =
-    rows.length <= VIRTUALIZE_THRESHOLD ? (
-      <div>{rows.map((row) => renderRow(row))}</div>
-    ) : (
-      <VirtualizedLedger
-        rows={rows}
-        scrollRef={scrollRef}
-        renderRow={renderRow}
-      />
-    );
+  const body = virtualized ? (
+    <VirtualizedLedger
+      rows={rows}
+      scrollRef={scrollRef}
+      scrollToRowRef={scrollToRowRef}
+      renderRow={renderRow}
+    />
+  ) : (
+    <div>
+      {rows.map((row) => (
+        <div key={row.key} data-row-key={row.key}>
+          {renderRow(row)}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div
       ref={scrollRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
       style={{
         height: "100%",
         overflowY: "auto",
         padding: "4px 12px 24px",
+        outline: "none",
       }}
     >
       {body}
@@ -810,10 +866,12 @@ export function Ledger({
 function VirtualizedLedger({
   rows,
   scrollRef,
+  scrollToRowRef,
   renderRow,
 }: {
   rows: LedgerRowModel[];
   scrollRef: ReactNS.RefObject<HTMLDivElement | null>;
+  scrollToRowRef: ReactNS.MutableRefObject<((rowIndex: number) => void) | null>;
   renderRow: (row: LedgerRowModel) => ReactNS.ReactNode;
 }) {
   const virtualizer = useVirtualizer({
@@ -822,6 +880,8 @@ function VirtualizedLedger({
     estimateSize: (index: number) => rows[index].height,
     overscan: 12,
   });
+  scrollToRowRef.current = (rowIndex: number) =>
+    virtualizer.scrollToIndex(rowIndex, { align: "auto" });
   return (
     <div
       style={{

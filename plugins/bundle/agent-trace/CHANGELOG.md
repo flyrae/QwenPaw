@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.7 (2026-09-23)
+
+- **Selection follows you:** selecting a record from the timeline, a
+  search jump, or the keyboard scrolls the ledger to it (virtualized
+  sessions included) and expands a collapsed request or hidden tool
+  calls when the record sits inside one.
+- **Search navigation:** the toolbar shows ``i / n`` (or the match
+  count), with previous/next buttons; Enter / Shift+Enter in the search
+  box jump to the next / previous match.
+- **Keyboard:** ↑/↓ move between ledger records and Esc closes the
+  inspector once the ledger has focus; session list entries and agent
+  group headers are reachable with Tab and open with Enter / Space.
+  Shortcuts are listed in the legend.
+- **Delete:** after deleting a session the page moves to the
+  neighbouring session (or the empty state) instead of leaving the
+  deleted trace on screen.
+- **Language:** relative times, run/session statuses, inspector labels,
+  and timeline tooltips follow the page language; components pick up the
+  host's live locale instead of a possibly stale localStorage value.
+  Projection-mode, lane, and record-kind labels stay in English as
+  before.
+- **Dark mode:** JSON highlighting and the token / reasoning / skill
+  accent colors switch to dark-theme variants (host theme, falling back
+  to the OS preference).
+
 ## 0.8.6 (2026-09-23)
 
 - **Frontend:** ledger and timeline callbacks keep a stable identity, so

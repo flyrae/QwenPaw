@@ -176,6 +176,34 @@ const STRINGS = {
     apiShowEarlier: "显示更早的消息",
     apiCollapseEarlier: "收起，只看最近",
     reasoningShort: "推理",
+    interrupted: "已中断",
+    justNow: "刚刚",
+    minutesAgo: "{n} 分钟前",
+    hoursAgo: "{n} 小时前",
+    searchMatches: "{n} 条匹配",
+    searchNoMatch: "无匹配",
+    prevMatch: "上一个匹配（Shift+Enter）",
+    nextMatch: "下一个匹配（Enter）",
+    legendKeysTitle: "快捷键：",
+    legendKeys:
+      "↑/↓ 切换记录 · Esc 关闭检查器 · 搜索框内 Enter / Shift+Enter 跳到下一个 / 上一个匹配",
+    copy: "复制",
+    rawTab: "原始",
+    kind: "类型",
+    total: "合计",
+    cached: "缓存命中",
+    cacheCreated: "缓存写入",
+    apiTime: "API 耗时",
+    tools: "工具",
+    noTimingData: "暂无时序数据",
+    loadEarlierHistory: "点击加载更早的记录",
+    loadingEarlierHistory: "正在加载更早的记录…",
+    contentTokens: "正文",
+    provider: "提供商",
+    tool: "工具",
+    charCount: "字符数",
+    optionsTab: "参数",
+    jumpToResult: "查看最终回复 →",
   },
   "en-US": {
     routeLabel: "Trace",
@@ -359,6 +387,34 @@ const STRINGS = {
     apiShowEarlier: "Show earlier messages",
     apiCollapseEarlier: "Collapse to recent only",
     reasoningShort: "Reasoning",
+    interrupted: "Interrupted",
+    justNow: "just now",
+    minutesAgo: "{n} min ago",
+    hoursAgo: "{n} h ago",
+    searchMatches: "{n} matches",
+    searchNoMatch: "No matches",
+    prevMatch: "Previous match (Shift+Enter)",
+    nextMatch: "Next match (Enter)",
+    legendKeysTitle: "Shortcuts: ",
+    legendKeys:
+      "↑/↓ move between records · Esc closes the inspector · Enter / Shift+Enter in search jumps to the next / previous match",
+    copy: "Copy",
+    rawTab: "Raw",
+    kind: "Kind",
+    total: "Total",
+    cached: "Cached",
+    cacheCreated: "Cache created",
+    apiTime: "API time",
+    tools: "Tools",
+    noTimingData: "No timing data",
+    loadEarlierHistory: "Click to load earlier history",
+    loadingEarlierHistory: "Loading earlier history…",
+    contentTokens: "Content",
+    provider: "Provider",
+    tool: "Tool",
+    charCount: "Chars",
+    optionsTab: "Options",
+    jumpToResult: "Result: Assistant Message →",
   },
 } as const;
 
@@ -368,7 +424,17 @@ export function resolveLocale(raw: string | null | undefined): TraceLocale {
   return raw && raw.toLowerCase().startsWith("zh") ? "zh-CN" : "en-US";
 }
 
+// The page resolves the host's live locale and publishes it here, so
+// helpers without a locale prop follow a host language switch instead of
+// reading a possibly stale localStorage value.
+let activeLocale: TraceLocale | null = null;
+
+export function setActiveLocale(locale: TraceLocale): void {
+  activeLocale = locale;
+}
+
 export function storedLocale(): TraceLocale {
+  if (activeLocale !== null) return activeLocale;
   try {
     return resolveLocale(localStorage.getItem("language"));
   } catch {
@@ -378,4 +444,29 @@ export function storedLocale(): TraceLocale {
 
 export function t(locale: TraceLocale, key: TraceStringKey): string {
   return STRINGS[locale][key];
+}
+
+/** ``t`` with ``{name}`` placeholders filled from *vars*. */
+export function tf(
+  locale: TraceLocale,
+  key: TraceStringKey,
+  vars: Record<string, string | number>,
+): string {
+  return t(locale, key).replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in vars ? String(vars[name]) : match,
+  );
+}
+
+/** Localized run/session status label. */
+export function statusLabel(locale: TraceLocale, status: string): string {
+  switch (status) {
+    case "running":
+    case "success":
+    case "error":
+    case "cancelled":
+    case "interrupted":
+      return t(locale, status);
+    default:
+      return t(locale, "unknown");
+  }
 }
