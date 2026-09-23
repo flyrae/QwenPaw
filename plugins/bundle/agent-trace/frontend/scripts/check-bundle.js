@@ -40,4 +40,15 @@ if (offenders.size > 0) {
   );
   process.exit(1);
 }
-console.log("check-bundle: no bare module specifiers");
+
+// Vite library mode leaves `process.env.NODE_ENV` in bundled dependencies
+// (e.g. @tanstack/react-virtual), but the Console has no `process` global,
+// so the first virtualized render throws. vite.config.ts must define it.
+const processRefs = source.match(/\bprocess\.env\b/g);
+if (processRefs) {
+  console.error(
+    `check-bundle: ${processRefs.length} unreplaced process.env reference(s) in bundle`,
+  );
+  process.exit(1);
+}
+console.log("check-bundle: no bare module specifiers or process.env");

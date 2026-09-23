@@ -4,6 +4,11 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react({ jsxRuntime: "classic" })],
+  // Library mode does not replace this for bundled dependencies, and the
+  // Console has no `process` global (react-virtual reads it on render).
+  define: {
+    "process.env.NODE_ENV": JSON.stringify("production"),
+  },
   resolve: {
     alias: {
       // Dependencies that import "react"/"react-dom" resolve to host

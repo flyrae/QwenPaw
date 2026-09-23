@@ -2,6 +2,13 @@
 
 ## 0.8.7 (2026-09-23)
 
+- **Fix: long sessions crashed the trace page** with ``ReferenceError:
+  process is not defined``. Vite library mode left
+  ``process.env.NODE_ENV`` inside the bundled ``@tanstack/react-virtual``,
+  and the Console has no ``process`` global, so the first virtualized
+  ledger render threw (any session above the virtualization threshold;
+  150 rows before 0.8.4, 80 since). The build now defines it, and the
+  bundle guard fails if an unreplaced ``process.env`` slips back in.
 - **Selection follows you:** selecting a record from the timeline, a
   search jump, or the keyboard scrolls the ledger to it (virtualized
   sessions included) and expands a collapsed request or hidden tool
