@@ -4,9 +4,9 @@
 
 - **Fix: approval decide accepts and records ``actor``.** Console
   ``/approve`` and ``/deny`` endpoints pass the logged-in actor to
-  ``ApprovalService.resolve_request``. The wrapper now forwards this
-  keyword only when supplied, preserving compatibility with older hosts,
-  and stores the actor on the ``approval/decided`` event.
+  ``ApprovalService.resolve_request``. The wrapper now records this on
+  the ``approval/decided`` event and forwards the keyword only when the
+  host's original method supports it, preserving older-host compatibility.
 - Widened the host-version constraint to ``QwenPaw >=2.0.0,<2.3.0``
   after verifying the runtime hooks and PluginApi surface across the
   supported releases.
