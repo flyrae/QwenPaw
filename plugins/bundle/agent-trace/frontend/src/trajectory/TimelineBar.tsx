@@ -23,6 +23,7 @@ import {
   deriveTrajectoryTimeline,
   formatTimelineOffset,
   type TrajectoryTimelineMode,
+  type TrajectoryTimelineSpan,
   type TrajectoryTimeRange,
 } from "./timeline";
 import { storedLocale, t } from "../locale";
@@ -274,6 +275,115 @@ function EarlierHistoryBoundary({
     </TooltipSpan>
   );
 }
+
+/**
+ * Record spans, split out so pointer moves that only shift the hover line
+ * do not re-render every span and its tooltip.
+ */
+const TimelineSpans = React.memo(function TimelineSpans({
+  spans,
+  modelStart,
+  fullDuration,
+  domainStart,
+  domainDuration,
+  mode,
+  selectedIndex,
+  hoveredIndex,
+  searchMatchIndexes,
+  activeRange,
+  detailByIndex,
+}: {
+  spans: readonly TrajectoryTimelineSpan[];
+  modelStart: number;
+  fullDuration: number;
+  domainStart: number;
+  domainDuration: number;
+  mode: TrajectoryTimelineMode;
+  selectedIndex: number | null;
+  hoveredIndex: number | null;
+  searchMatchIndexes: ReadonlySet<number> | null;
+  activeRange: TrajectoryTimeRange | null;
+  detailByIndex: ReadonlyMap<number, TimelineRecordDetail>;
+}) {
+  return (
+    <>
+      {spans
+        .filter(
+          (span) =>
+            span.index === selectedIndex ||
+            (span.end >= domainStart &&
+              span.start <= domainStart + domainDuration),
+        )
+        .map((span) => {
+          const left = (span.start - modelStart) / fullDuration;
+          const width = (span.end - span.start) / fullDuration;
+          const widthPercent = width * 100;
+          const detail = detailByIndex.get(span.index);
+          const ttftMs = detail?.ttftMs;
+          const decodingMs = detail?.decodingMs;
+          const ttftFraction =
+            ttftMs === undefined ||
+            decodingMs === undefined ||
+            ttftMs + decodingMs <= 0
+              ? null
+              : ttftMs / (ttftMs + decodingMs);
+          return (
+            <TooltipSpan
+              key={span.index}
+              label={timelineTooltipLabel(span.kind, detail)}
+              placement="bottom"
+            >
+              <span
+                aria-hidden="true"
+                className={css.span}
+                data-timeline-span={span.kind}
+                data-timeline-record-index={span.index}
+                data-assistant-timing={
+                  ttftFraction === null ? undefined : "true"
+                }
+                data-error={span.isError || undefined}
+                data-equal-duration={mode === "time" || undefined}
+                data-current={span.index === selectedIndex || undefined}
+                data-hovered={hoveredIndex === span.index || undefined}
+                data-search-match={
+                  searchMatchIndexes === null
+                    ? undefined
+                    : searchMatchIndexes.has(span.index)
+                    ? "true"
+                    : "false"
+                }
+                data-selected={
+                  activeRange === null
+                    ? undefined
+                    : span.start <= activeRange.end &&
+                      span.end >= activeRange.start
+                    ? "true"
+                    : "false"
+                }
+                style={
+                  {
+                    "--trajectory-span-left": `${left * 100}%`,
+                    "--trajectory-span-width": `${widthPercent}%`,
+                    "--trajectory-span-gap": `min(${
+                      widthPercent * 0.08
+                    }%, 1px)`,
+                    "--trajectory-span-lane": span.lane,
+                    ...(ttftFraction === null
+                      ? {}
+                      : {
+                          "--trajectory-assistant-ttft": `${
+                            ttftFraction * 100
+                          }%`,
+                        }),
+                  } as CSSProperties
+                }
+              />
+            </TooltipSpan>
+          );
+        })}
+    </>
+  );
+});
 
 /** Overview renderer with drag ranges, click-sized focus, and Escape reset. */
 export const TimelineBar = React.memo(function TimelineBar({
@@ -557,7 +667,14 @@ export const TimelineBar = React.memo(function TimelineBar({
   const onPointerMove = (event: PointerEvent) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const fraction = fractionAt(event);
-    setHover({ fraction, recordIndex: recordIndexAt(event) });
+    const hoveredIndex = recordIndexAt(event);
+    // Over a span the hover line is hidden, so the fraction is irrelevant;
+    // keep the previous state to skip a render while staying on one span.
+    setHover((current) =>
+      hoveredIndex !== null && current?.recordIndex === hoveredIndex
+        ? current
+        : { fraction, recordIndex: hoveredIndex },
+    );
     const pan = panRef.current;
     if (pan !== null && pan.pointerId === event.pointerId) {
       if (Math.abs(event.clientX - pan.anchorClientX) >= MINIMUM_DRAG_PX) {
@@ -898,82 +1015,19 @@ export const TimelineBar = React.memo(function TimelineBar({
             data-timeline-domain
             style={projectedDomainStyle}
           >
-            {model.spans
-              .filter(
-                (span) =>
-                  span.index === selectedIndex ||
-                  (span.end >= domainStart &&
-                    span.start <= domainStart + domainDuration),
-              )
-              .map((span) => {
-                const left = (span.start - model.start) / fullDuration;
-                const width = (span.end - span.start) / fullDuration;
-                const widthPercent = width * 100;
-                const detail = detailByIndex.get(span.index);
-                const ttftMs = detail?.ttftMs;
-                const decodingMs = detail?.decodingMs;
-                const ttftFraction =
-                  ttftMs === undefined ||
-                  decodingMs === undefined ||
-                  ttftMs + decodingMs <= 0
-                    ? null
-                    : ttftMs / (ttftMs + decodingMs);
-                return (
-                  <TooltipSpan
-                    key={span.index}
-                    label={timelineTooltipLabel(span.kind, detail)}
-                    placement="bottom"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={css.span}
-                      data-timeline-span={span.kind}
-                      data-timeline-record-index={span.index}
-                      data-assistant-timing={
-                        ttftFraction === null ? undefined : "true"
-                      }
-                      data-error={span.isError || undefined}
-                      data-equal-duration={mode === "time" || undefined}
-                      data-current={span.index === selectedIndex || undefined}
-                      data-hovered={
-                        hover?.recordIndex === span.index || undefined
-                      }
-                      data-search-match={
-                        searchMatchIndexes === null
-                          ? undefined
-                          : searchMatchIndexes.has(span.index)
-                          ? "true"
-                          : "false"
-                      }
-                      data-selected={
-                        activeRange === null
-                          ? undefined
-                          : span.start <= activeRange.end &&
-                            span.end >= activeRange.start
-                          ? "true"
-                          : "false"
-                      }
-                      style={
-                        {
-                          "--trajectory-span-left": `${left * 100}%`,
-                          "--trajectory-span-width": `${widthPercent}%`,
-                          "--trajectory-span-gap": `min(${
-                            widthPercent * 0.08
-                          }%, 1px)`,
-                          "--trajectory-span-lane": span.lane,
-                          ...(ttftFraction === null
-                            ? {}
-                            : {
-                                "--trajectory-assistant-ttft": `${
-                                  ttftFraction * 100
-                                }%`,
-                              }),
-                        } as CSSProperties
-                      }
-                    />
-                  </TooltipSpan>
-                );
-              })}
+            <TimelineSpans
+              spans={model.spans}
+              modelStart={model.start}
+              fullDuration={fullDuration}
+              domainStart={domainStart}
+              domainDuration={domainDuration}
+              mode={mode}
+              selectedIndex={selectedIndex}
+              hoveredIndex={hover?.recordIndex ?? null}
+              searchMatchIndexes={searchMatchIndexes}
+              activeRange={activeRange}
+              detailByIndex={detailByIndex}
+            />
           </div>
         </div>
       </div>

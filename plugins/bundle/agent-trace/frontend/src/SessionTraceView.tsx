@@ -624,6 +624,62 @@ export function SessionTraceView({
 
   const showInspector = selectedRecord !== null || requestSummary !== null;
 
+  // Ledger rows and the timeline are memoized; their callbacks must keep
+  // a stable identity across renders or every row re-renders anyway.
+  const oldestSeqRef = useRef<number | null>(null);
+  oldestSeqRef.current = detail?.events[0]?.seq ?? null;
+
+  const loadEarlier = useCallback(async (): Promise<boolean> => {
+    const target = sessionIdRef.current;
+    const oldestSeq = oldestSeqRef.current;
+    if (!target || oldestSeq === null) return false;
+    await loadDetail(target, oldestSeq);
+    return true;
+  }, [loadDetail]);
+
+  const loadOlderRows = useCallback(() => {
+    setLoadingOlder(true);
+    void loadEarlier().finally(() => setLoadingOlder(false));
+  }, [loadEarlier]);
+
+  const selectRecord = useCallback((index: number) => {
+    setSelectedIndex((prev) => (prev === index ? null : index));
+    setSelectedTurn(null);
+  }, []);
+
+  const selectTurn = useCallback((turn: number) => {
+    setSelectedTurn(turn);
+    setSelectedIndex(null);
+  }, []);
+
+  const toggleTurn = useCallback((turn: number) => {
+    setCollapsedTurns((prev) => {
+      const next = new Set(prev);
+      if (next.has(turn)) next.delete(turn);
+      else next.add(turn);
+      return next;
+    });
+  }, []);
+
+  const openSkillSpan = useCallback(
+    (skill: string, turnNo: number | null) => {
+      // Prefer the span of the clicked request, else the earliest.
+      const byTurn =
+        turnNo !== null
+          ? (turns.find((item) => item.turn === turnNo)?.skillSpans ?? []).find(
+              (span) => span.skill === skill,
+            )
+          : undefined;
+      const chosen =
+        byTurn ??
+        turns
+          .flatMap((item) => item.skillSpans ?? [])
+          .find((span) => span.skill === skill);
+      if (chosen) setSelectedSpanId(chosen.id);
+    },
+    [turns],
+  );
+
   return (
     <div
       style={{
@@ -829,11 +885,7 @@ export function SessionTraceView({
         mode={mode}
         range={range}
         hasEarlierRecords={hasOlder}
-        onLoadEarlier={async () => {
-          if (!detail || detail.events.length === 0) return false;
-          await loadDetail(sessionId as string, detail.events[0]?.seq);
-          return true;
-        }}
+        onLoadEarlier={loadEarlier}
         selectedIndex={selectedIndex}
         searchMatchIndexes={searchMatchIndexes}
         onRangeChange={setRange}
@@ -873,51 +925,14 @@ export function SessionTraceView({
               collapsedTurns={collapsedTurns}
               focusIndexes={focusIndexes}
               searchMatchIndexes={searchMatchIndexes}
-              onSelectedIndexChange={(index: number) => {
-                if (index === selectedIndex) {
-                  setSelectedIndex(null);
-                  return;
-                }
-                setSelectedIndex(index);
-                setSelectedTurn(null);
-              }}
-              onSkillSpanOpen={(skill: string, turnNo: number | null) => {
-                const all = turns.flatMap((item) => item.skillSpans ?? []);
-                // Prefer the span of the clicked request, else earliest.
-                const byTurn =
-                  turnNo !== null
-                    ? (
-                        turns.find((item) => item.turn === turnNo)
-                          ?.skillSpans ?? []
-                      ).find((span) => span.skill === skill)
-                    : undefined;
-                const chosen =
-                  byTurn ?? all.find((span) => span.skill === skill);
-                if (chosen) setSelectedSpanId(chosen.id);
-              }}
-              onSelectedTurnChange={(turn: number) => {
-                setSelectedTurn(turn);
-                setSelectedIndex(null);
-              }}
+              onSelectedIndexChange={selectRecord}
+              onSkillSpanOpen={openSkillSpan}
+              onSelectedTurnChange={selectTurn}
               callsCollapsed={callsCollapsed}
-              onToggleTurn={(turn: number) => {
-                setCollapsedTurns((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(turn)) next.delete(turn);
-                  else next.add(turn);
-                  return next;
-                });
-              }}
+              onToggleTurn={toggleTurn}
               hasOlderRecords={hasOlder}
               loadingOlder={loadingOlder}
-              onLoadOlder={() => {
-                if (!detail || detail.events.length === 0) return;
-                setLoadingOlder(true);
-                void loadDetail(
-                  sessionId as string,
-                  detail.events[0]?.seq,
-                ).finally(() => setLoadingOlder(false));
-              }}
+              onLoadOlder={loadOlderRows}
               emptyText={t(locale, "noSessions")}
               initialRecord={initialHeader}
             />
@@ -937,10 +952,7 @@ export function SessionTraceView({
               record={selectedRecord}
               request={requestSummary}
               onJumpSession={onJumpSession}
-              onSelectTurn={(turn: number) => {
-                setSelectedTurn(turn);
-                setSelectedIndex(null);
-              }}
+              onSelectTurn={selectTurn}
               onClose={closeInspector}
             />
           ) : null}
