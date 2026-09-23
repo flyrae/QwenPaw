@@ -116,6 +116,19 @@ def build_router() -> APIRouter:
     ) -> Dict[str, Any]:
         service = _require_service()
         _validate_session_id(session_id)
+        if not type and not q:
+            # The Console live-polls this every few seconds while a run is
+            # open; stream the file keeping only the requested window
+            # instead of loading every event into memory.
+            windowed = await asyncio.to_thread(
+                service.store.read_events,
+                session_id,
+                before_seq=before_seq,
+                limit=limit,
+            )
+            if windowed is None:
+                raise HTTPException(status_code=404, detail="not found")
+            return windowed
         result = await asyncio.to_thread(
             service.store.read_session,
             session_id,
