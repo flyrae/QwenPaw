@@ -38,7 +38,7 @@ def _env_overrides() -> Dict[str, Any]:
     for name, raw in os.environ.items():
         if not name.startswith(_ENV_PREFIX):
             continue
-        key = name[len(_ENV_PREFIX) :].lower()
+        key = name[len(_ENV_PREFIX):].lower()
         if not hasattr(defaults, key) or key == "redact_patterns":
             continue
         value = raw.strip()
@@ -69,7 +69,7 @@ def _env_overrides() -> Dict[str, Any]:
     # URL shape is validated up-front so update_from_dict never ends
     # up half-applied with a bad remote_url.
     if "remote_url" in overrides and not str(
-        overrides["remote_url"],
+        overrides["remote_url"]
     ).startswith(("http://", "https://")):
         logger.warning(
             "agent-trace: ignoring AGENT_TRACE_REMOTE_URL (must start"
@@ -78,7 +78,6 @@ def _env_overrides() -> Dict[str, Any]:
         )
         overrides.pop("remote_url")
     return overrides
-
 
 _MIN_PAYLOAD_CHARS = 100
 _MAX_PAYLOAD_CHARS = 200_000
@@ -139,7 +138,9 @@ class TraceConfig:
             "remote_enabled": self.remote_enabled,
             "remote_url": self.remote_url,
             "remote_token": "***" if self.remote_token else "",
-            "remote_enroll_key": ("***" if self.remote_enroll_key else ""),
+            "remote_enroll_key": (
+                "***" if self.remote_enroll_key else ""
+            ),
             "remote_instance_id": self.remote_instance_id,
             "remote_batch_max_events": self.remote_batch_max_events,
             "remote_batch_max_bytes": self.remote_batch_max_bytes,

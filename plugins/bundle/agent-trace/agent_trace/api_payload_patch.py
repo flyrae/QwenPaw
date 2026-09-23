@@ -213,8 +213,7 @@ def _record_api_event(
         )
     except Exception:  # noqa: BLE001
         logger.debug(
-            "agent-trace: api payload event write failed",
-            exc_info=True,
+            "agent-trace: api payload event write failed", exc_info=True
         )
 
 
@@ -228,10 +227,7 @@ def _make_wrapper(args: tuple, kwargs: dict):
     is_stream = bool(call_kwargs.get("stream", False))
 
     _record_api_event(
-        "request",
-        model,
-        messages=formatted_msgs,
-        params=params,
+        "request", model, messages=formatted_msgs, params=params
     )
 
     start = time.perf_counter()
@@ -250,10 +246,7 @@ def _make_wrapper(args: tuple, kwargs: dict):
     def _on_error(exc: BaseException) -> None:
         duration_ms = (time.perf_counter() - start) * 1000.0
         _record_api_event(
-            "response",
-            model,
-            error=str(exc),
-            duration_ms=duration_ms,
+            "response", model, error=str(exc), duration_ms=duration_ms
         )
 
     return is_stream, _on_result, _on_error
@@ -389,7 +382,7 @@ def apply_api_payload_patch() -> None:
             "payload capture is DISABLED (everything else works). "
             "Install it with `pip install wrapt` in QwenPaw's Python "
             "to enable; `qwenpaw plugin install` does this "
-            "automatically.",
+            "automatically."
         )
         return
 
@@ -401,8 +394,7 @@ def apply_api_payload_patch() -> None:
                 # Someone (Langfuse, litellm, ...) already wrapped it;
                 # wrapt chains transparently — just note it.
                 logger.debug(
-                    "agent-trace: %s already wrapped, chaining",
-                    target,
+                    "agent-trace: %s already wrapped, chaining", target
                 )
 
             wrapper = (
@@ -413,14 +405,11 @@ def apply_api_payload_patch() -> None:
 
             wrap_function_wrapper(module_name, attr_path, wrapper)
             logger.info(
-                "agent-trace: API payload patch applied to %s",
-                target,
+                "agent-trace: API payload patch applied to %s", target
             )
         except Exception:  # noqa: BLE001
             logger.warning(
-                "agent-trace: failed to patch %s",
-                target,
-                exc_info=True,
+                "agent-trace: failed to patch %s", target, exc_info=True
             )
 
     _active = True
@@ -436,6 +425,5 @@ def restore_api_payload_patch() -> None:
     global _active
     _active = False
     logger.info(
-        "agent-trace: API payload patch deactivated "
-        "(pass-through until restart)",
+        "agent-trace: API payload patch deactivated (pass-through until restart)"
     )

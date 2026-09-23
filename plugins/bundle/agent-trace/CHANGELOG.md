@@ -2,32 +2,51 @@
 
 ## 0.8.5 (2026-09-23)
 
-- **Fix: approval decide accepts and records ``actor``.** Console
-  ``/approve`` and ``/deny`` endpoints pass the logged-in actor to
-  ``ApprovalService.resolve_request``. The wrapper now records this on
-  the ``approval/decided`` event and forwards the keyword only when the
-  host's original method supports it, preserving older-host compatibility.
-- Widened the host-version constraint to ``QwenPaw >=2.0.0,<2.3.0``
-  after verifying the runtime hooks and PluginApi surface across the
-  supported releases.
-- Includes the 0.8.3/0.8.4 frontend improvements below.
+Ported back from the QwenPaw fork-main integration (PR flyrae/QwenPaw#1)
+plus alignment:
 
-## 0.8.4 (2026-09-20)
-
-- **Frontend:** memoize ledger record/request rows so selecting one
-  line does not rebuild the whole table; virtualize from 80 rows
-  (was 150). Session search is debounced and sent as ``q`` so it
-  matches beyond the currently loaded page.
-
-## 0.8.3 (2026-09-20)
-
-- **Frontend:** live poll / refresh merge events by ``seq`` instead of
+- **Frontend performance:** ledger rows are memoized (selecting a row
+  no longer rebuilds the table) and virtualization kicks in from 80
+  rows (was 150). Live polling merges events by ``seq`` instead of
   replacing the window, so "load older" history and the current
-  selection survive a running turn. Stale fetches after a session
-  switch are ignored. The session list poll keeps already-loaded pages
-  (up to the 500 cap). Event search is debounced and matches against a
-  precomputed haystack rather than re-stringifying every record on
-  each keystroke.
+  selection survive a running turn; stale fetches after a session
+  switch are ignored. Session search is debounced and sent as ``q``;
+  the session-list poll keeps already-loaded pages (≤500). Event
+  search matches a precomputed haystack instead of re-stringifying
+  every record per keystroke.
+- ``GET /agent-trace/sessions`` (local read API) accepts ``q``,
+  matching session id, title, agent, channel, user, instance, and
+  hostname — the Console-side counterpart of the portal's search.
+- Approval decide: ``actor`` forwarding is gated on the host's
+  original ``resolve_request`` signature (``inspect``), so an older
+  host never receives the unsupported keyword while the actor is
+  still recorded on ``approval/decided``.
+
+## 0.8.4 (2026-09-17)
+
+- **Fix: approval decide crashed with ``actor``** — the console
+  ``/approve`` and ``/deny`` endpoints call
+  ``ApprovalService.resolve_request(..., actor=...)`` (the logged-in
+  user deciding), but the capture wrapper's signature didn't accept
+  the keyword, so every console-side approval raised ``TypeError``
+  the moment the patch was active. The wrapper now forwards
+  ``actor`` (only when supplied, so hosts predating the parameter
+  keep working) and records it on the ``approval/decided`` event —
+  the trace now shows *who* decided, not just the decision.
+
+## 0.8.3 (2026-09-17)
+
+- Widened the host-version constraint to ``qwenpaw_version >=2.0.0,
+  <2.3.0`` (covers 2.0.0 through 2.2.2 inclusive). Verified against
+  the QwenPaw tags: ``runtime/hooks.py``, ``runtime/phases.py``, and
+  ``schemas.py`` (AgentRequest) are byte-identical across
+  v2.0.0–v2.2.1; all seven PluginApi registration methods exist with
+  compatible signatures (``register_workspace_created_hook`` only
+  gained a defaulted ``reload_safe`` parameter); ``WORKING_DIR`` and
+  the Console host surface (``getApiUrl``) predate 2.0.0's tag. The
+  previous min of 2.1.0 was a conservative initial declaration, not
+  a known incompatibility. Note: the loader treats max as exclusive
+  (``>=min, <max``), hence 2.3.0 to include 2.2.2.
 
 ## 0.8.2 (2026-09-17)
 

@@ -47,7 +47,9 @@ def _plugin_version() -> str:
     try:
         import json as _json
 
-        manifest = Path(__file__).resolve().parent.parent / "plugin.json"
+        manifest = (
+            Path(__file__).resolve().parent.parent / "plugin.json"
+        )
         return str(
             _json.loads(manifest.read_text(encoding="utf-8")).get(
                 "version",
@@ -235,7 +237,9 @@ class TraceShipper:
                     and now >= self._next_spill_drain_at
                     and self._spill_size() > 0
                 ):
-                    self._next_spill_drain_at = now + _SPILL_DRAIN_RETRY_S
+                    self._next_spill_drain_at = (
+                        now + _SPILL_DRAIN_RETRY_S
+                    )
                     await self._drain_spill()
             except asyncio.CancelledError:
                 raise
@@ -363,10 +367,7 @@ class TraceShipper:
             )
         except Exception as exc:  # noqa: BLE001
             self._last_error = f"{type(exc).__name__}: {exc}"[:200]
-            logger.debug(
-                "agent-trace: remote ingest unreachable",
-                exc_info=True,
-            )
+            logger.debug("agent-trace: remote ingest unreachable", exc_info=True)
             return False
         if status == 401 and self._enroll_key():
             # Our instance token was revoked (server-side rotation or
@@ -377,7 +378,9 @@ class TraceShipper:
                 time.monotonic() >= self._next_enroll_at
                 and await self._enroll()
             ):
-                headers["Authorization"] = f"Bearer {self._instance_token}"
+                headers["Authorization"] = (
+                    f"Bearer {self._instance_token}"
+                )
                 try:
                     status = await self._http_post(
                         f"{url}/ingest",
@@ -386,13 +389,14 @@ class TraceShipper:
                         timeout=float(self._config.remote_timeout_s),
                     )
                 except Exception as exc:  # noqa: BLE001
-                    self._last_error = f"{type(exc).__name__}: {exc}"[:200]
+                    self._last_error = (
+                        f"{type(exc).__name__}: {exc}"[:200]
+                    )
                     return False
         if not 200 <= status < 300:
             self._last_error = f"HTTP {status}"[:200]
             logger.debug(
-                "agent-trace: remote ingest rejected with HTTP %s",
-                status,
+                "agent-trace: remote ingest rejected with HTTP %s", status
             )
             return False
         return True
@@ -402,22 +406,22 @@ class TraceShipper:
     # ------------------------------------------------------------------
 
     def _enroll_key(self) -> str:
-        return (getattr(self._config, "remote_enroll_key", "") or "").strip()
+        return (
+            getattr(self._config, "remote_enroll_key", "") or ""
+        ).strip()
 
     def _load_instance_token(self) -> str:
         try:
             return (
-                (self._root / INSTANCE_TOKEN_FILENAME)
-                .read_text(encoding="utf-8")
-                .strip()
-            )
+                self._root / INSTANCE_TOKEN_FILENAME
+            ).read_text(encoding="utf-8").strip()
         except OSError:
             return ""
 
     def _bearer_token(self) -> str:
-        return (
-            self._instance_token or (self._config.remote_token or "").strip()
-        )
+        return self._instance_token or (
+            self._config.remote_token or ""
+        ).strip()
 
     async def _enroll(self) -> bool:
         """Exchange the bootstrap key at POST /enroll for an
@@ -429,9 +433,7 @@ class TraceShipper:
         if not url or not key:
             return False
         body = json.dumps(
-            self._envelope,
-            ensure_ascii=False,
-            default=str,
+            self._envelope, ensure_ascii=False, default=str
         ).encode("utf-8")
         try:
             status, text = await self._enroll_post(
@@ -470,8 +472,7 @@ class TraceShipper:
         try:
             self._root.mkdir(parents=True, exist_ok=True)
             (self._root / INSTANCE_TOKEN_FILENAME).write_text(
-                token,
-                encoding="utf-8",
+                token, encoding="utf-8"
             )
         except OSError:
             logger.debug(
@@ -510,8 +511,7 @@ class TraceShipper:
             )
             try:
                 with urllib.request.urlopen(
-                    request,
-                    timeout=timeout,
+                    request, timeout=timeout
                 ) as resp:
                     return (
                         resp.status,
@@ -564,10 +564,7 @@ class TraceShipper:
                     )
         except OSError:
             self._dropped += len(batch)
-            logger.debug(
-                "agent-trace: shipper spill write failed",
-                exc_info=True,
-            )
+            logger.debug("agent-trace: shipper spill write failed", exc_info=True)
 
     def _spill_size(self) -> int:
         try:
