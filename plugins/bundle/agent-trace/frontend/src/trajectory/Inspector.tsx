@@ -33,6 +33,69 @@ const { CopyOutlined, CloseOutlined } = host.antdIcons;
 
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 720;
+const DEFAULT_WIDTH = 400;
+const WIDTH_STORAGE_KEY = "agent-trace:inspector-width";
+
+function clampWidth(value: number): number {
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value));
+}
+
+function storedWidth(): number {
+  try {
+    const value = Number(window.localStorage.getItem(WIDTH_STORAGE_KEY));
+    return Number.isFinite(value) && value > 0
+      ? clampWidth(value)
+      : DEFAULT_WIDTH;
+  } catch {
+    return DEFAULT_WIDTH;
+  }
+}
+
+/**
+ * Drag-resizable pane width. Pointer moves are coalesced to one update per
+ * frame (the pane re-renders its whole tab content), and the final width
+ * is remembered across sessions.
+ */
+function useResizableWidth() {
+  const [width, setWidth] = useState(storedWidth);
+  const dragRef = useRef<{ anchorX: number; anchorWidth: number } | null>(null);
+  useEffect(() => {
+    let frame: number | null = null;
+    let pending: number | null = null;
+    let latest: number | null = null;
+    const onMove = (event: globalThis.PointerEvent) => {
+      const drag = dragRef.current;
+      if (drag === null) return;
+      pending = clampWidth(drag.anchorWidth + drag.anchorX - event.clientX);
+      latest = pending;
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        if (pending !== null) setWidth(pending);
+        pending = null;
+      });
+    };
+    const onUp = () => {
+      if (dragRef.current === null) return;
+      dragRef.current = null;
+      if (latest === null) return;
+      try {
+        window.localStorage.setItem(WIDTH_STORAGE_KEY, String(latest));
+      } catch {
+        /* storage unavailable */
+      }
+      latest = null;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+  return { width, dragRef };
+}
 
 /** Aggregated view of one request (run) for the request inspector. */
 export interface RequestSummary {
@@ -776,27 +839,7 @@ export function Inspector({
   onClose,
 }: InspectorProps) {
   const locale = storedLocale();
-  const [width, setWidth] = useState(400);
-  const dragRef = useRef<{ anchorX: number; anchorWidth: number } | null>(null);
-  useEffect(() => {
-    const onMove = (event: globalThis.PointerEvent) => {
-      const drag = dragRef.current;
-      if (drag === null) return;
-      const delta = drag.anchorX - event.clientX;
-      setWidth(
-        Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, drag.anchorWidth + delta)),
-      );
-    };
-    const onUp = () => {
-      dragRef.current = null;
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, []);
+  const { width, dragRef } = useResizableWidth();
 
   if (record === null && request === null) {
     return (

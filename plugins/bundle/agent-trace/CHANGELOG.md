@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.6 (2026-09-23)
+
+- **Frontend:** ledger and timeline callbacks keep a stable identity, so
+  the memoized rows actually skip re-rendering on selection and search
+  (0.8.4's memo was defeated by inline handlers).
+- **Frontend:** a live poll that brings no new events reuses the loaded
+  session, so turns, the search index, and the timeline model are not
+  rebuilt every 5 s while a model call is in flight.
+- **Frontend:** timeline spans render in their own memoized layer; moving
+  the pointer only moves the hover line instead of re-rendering every span
+  and its tooltip.
+- **Frontend:** inspector resize is coalesced to one update per frame and
+  the chosen width is remembered.
+- ``GET /sessions/{id}`` without ``type``/``q`` streams the log and keeps
+  only the requested window instead of loading every event, which is the
+  path the live poll uses.
+
 ## 0.8.5 (2026-09-23)
 
 - **Fix: approval decide accepts and records ``actor``.** Console
