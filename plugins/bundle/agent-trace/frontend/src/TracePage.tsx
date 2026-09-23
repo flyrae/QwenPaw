@@ -244,7 +244,7 @@ export function TracePage() {
       // Poll with a window at least as large as what the user already
       // loaded so "load more" pages are not wiped every 15s. Backend
       // caps list_sessions at 500. Search always reloads the first page.
-      const keep = query ? 0 : (sessionsRef.current?.length ?? 0);
+      const keep = query ? 0 : sessionsRef.current?.length ?? 0;
       const page = await fetchSessionsPage({
         limit: query ? 100 : Math.min(500, Math.max(100, keep)),
         offset: 0,
@@ -333,8 +333,7 @@ export function TracePage() {
   }, [loadSessions]);
 
   const selectedSummary = useMemo(
-    () =>
-      sessions?.find((item) => sessionRef(item) === selected) ?? null,
+    () => sessions?.find((item) => sessionRef(item) === selected) ?? null,
     [sessions, selected],
   );
 

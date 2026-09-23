@@ -667,80 +667,80 @@ export function Ledger({
 
   const renderRow = useCallback(
     (row: LedgerRowModel): ReactNS.ReactNode => {
-    switch (row.type) {
-      case "load-older":
-        return (
-          <div style={{ textAlign: "center", height: LOAD_OLDER_HEIGHT }}>
-            <button
-              type="button"
-              onClick={onLoadOlder}
-              disabled={loadingOlder}
+      switch (row.type) {
+        case "load-older":
+          return (
+            <div style={{ textAlign: "center", height: LOAD_OLDER_HEIGHT }}>
+              <button
+                type="button"
+                onClick={onLoadOlder}
+                disabled={loadingOlder}
+                style={{
+                  border: "1px solid rgba(128,128,128,0.3)",
+                  borderRadius: 10,
+                  background: "transparent",
+                  padding: "1px 12px",
+                  fontSize: 11,
+                  cursor: loadingOlder ? "default" : "pointer",
+                  color: "rgba(128,128,128,1)",
+                }}
+              >
+                {loadingOlder ? "…" : `⋯ ${t(locale, "loadOlder")}`}
+              </button>
+            </div>
+          );
+        case "divider":
+          return (
+            <div
               style={{
-                border: "1px solid rgba(128,128,128,0.3)",
-                borderRadius: 10,
-                background: "transparent",
-                padding: "1px 12px",
-                fontSize: 11,
-                cursor: loadingOlder ? "default" : "pointer",
-                color: "rgba(128,128,128,1)",
+                height: DIVIDER_HEIGHT,
+                borderBottom: "1px dashed rgba(128,128,128,0.25)",
               }}
-            >
-              {loadingOlder ? "…" : `⋯ ${t(locale, "loadOlder")}`}
-            </button>
-          </div>
-        );
-      case "divider":
-        return (
-          <div
-            style={{
-              height: DIVIDER_HEIGHT,
-              borderBottom: "1px dashed rgba(128,128,128,0.25)",
-            }}
-          />
-        );
-      case "initial": {
-        const record = row.record as TrajectoryRecord;
-        return (
-          <RecordRow
-            record={record}
-            selected={selectedIndex === record.index}
-            dimmed={dimFor(record)}
-            multiRequest={multiRequest}
-            onSelectRecord={onSelectedIndexChange}
-            onOpenRun={onSelectedTurnChange}
-          />
-        );
+            />
+          );
+        case "initial": {
+          const record = row.record as TrajectoryRecord;
+          return (
+            <RecordRow
+              record={record}
+              selected={selectedIndex === record.index}
+              dimmed={dimFor(record)}
+              multiRequest={multiRequest}
+              onSelectRecord={onSelectedIndexChange}
+              onOpenRun={onSelectedTurnChange}
+            />
+          );
+        }
+        case "boundary": {
+          const turn = row.turn as TrajectoryTurnModel;
+          const turnNumber = turn.turn as number;
+          return (
+            <BoundaryRow
+              turn={turn}
+              collapsed={collapsedTurns.has(turnNumber)}
+              selected={selectedTurn === turnNumber}
+              cellCount={turn.groups[0]?.cells.length ?? 0}
+              onToggleTurn={onToggleTurn}
+              onSelectTurn={onSelectedTurnChange}
+              onSkillSpanOpen={onSkillSpanOpen}
+            />
+          );
+        }
+        case "record":
+        default: {
+          const record = row.record as TrajectoryRecord;
+          return (
+            <RecordRow
+              record={record}
+              selected={selectedIndex === record.index}
+              dimmed={dimFor(record)}
+              multiRequest={multiRequest}
+              onSelectRecord={onSelectedIndexChange}
+              onOpenRun={onSelectedTurnChange}
+            />
+          );
+        }
       }
-      case "boundary": {
-        const turn = row.turn as TrajectoryTurnModel;
-        const turnNumber = turn.turn as number;
-        return (
-          <BoundaryRow
-            turn={turn}
-            collapsed={collapsedTurns.has(turnNumber)}
-            selected={selectedTurn === turnNumber}
-            cellCount={turn.groups[0]?.cells.length ?? 0}
-            onToggleTurn={onToggleTurn}
-            onSelectTurn={onSelectedTurnChange}
-            onSkillSpanOpen={onSkillSpanOpen}
-          />
-        );
-      }
-      case "record":
-      default: {
-        const record = row.record as TrajectoryRecord;
-        return (
-          <RecordRow
-            record={record}
-            selected={selectedIndex === record.index}
-            dimmed={dimFor(record)}
-            multiRequest={multiRequest}
-            onSelectRecord={onSelectedIndexChange}
-            onOpenRun={onSelectedTurnChange}
-          />
-        );
-      }
-    }
     },
     [
       collapsedTurns,

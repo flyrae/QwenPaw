@@ -39,9 +39,10 @@ export function sessionRef(summary: {
     : summary.session_id;
 }
 
-export function parseSessionRef(
-  ref: string,
-): { sessionId: string; instance?: string } {
+export function parseSessionRef(ref: string): {
+  sessionId: string;
+  instance?: string;
+} {
   const tilde = ref.indexOf("~");
   if (tilde <= 0) return { sessionId: ref };
   return {
@@ -85,11 +86,7 @@ export function mergeSessionDetail(
   return {
     header: next.header ?? prev.header,
     events,
-    total_events: Math.max(
-      next.total_events,
-      prev.total_events,
-      events.length,
-    ),
+    total_events: Math.max(next.total_events, prev.total_events, events.length),
     size_bytes: Math.max(next.size_bytes, prev.size_bytes),
     mtime: Math.max(next.mtime, prev.mtime),
   };
@@ -255,9 +252,7 @@ export async function exportSessionFile(
   sessionId: string,
   instance?: string,
 ): Promise<void> {
-  const suffix = instance
-    ? `?instance=${encodeURIComponent(instance)}`
-    : "";
+  const suffix = instance ? `?instance=${encodeURIComponent(instance)}` : "";
   const response = await requestRaw(
     `/agent-trace/sessions/${encodeURIComponent(sessionId)}/export${suffix}`,
   );

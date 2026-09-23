@@ -112,8 +112,13 @@ class TestSessions:
 
     async def test_status_with_shipper(self, client, service, tmp_path):
         service.shipper = SimpleNamespace(
-            stats={"instance": "x", "queued": 1, "shipped": 2,
-                   "dropped": 0, "spilled": 0},
+            stats={
+                "instance": "x",
+                "queued": 1,
+                "shipped": 2,
+                "dropped": 0,
+                "spilled": 0,
+            },
         )
         response = await client.get("/agent-trace/status")
         assert response.status_code == 200

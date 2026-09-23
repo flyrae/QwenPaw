@@ -376,11 +376,7 @@ function cs(e, t) {
   return {
     header: t.header ?? e.header,
     events: s,
-    total_events: Math.max(
-      t.total_events,
-      e.total_events,
-      s.length
-    ),
+    total_events: Math.max(t.total_events, e.total_events, s.length),
     size_bytes: Math.max(t.size_bytes, e.size_bytes),
     mtime: Math.max(t.mtime, e.mtime)
   };
@@ -5576,29 +5572,26 @@ function Ho({
   x.current = e, qe(() => {
     ps().then(se).catch(() => se(null));
   }, []);
-  const z = Tn(
-    async (b, R) => {
-      R || h(!0);
-      try {
-        const { sessionId: A, instance: Z } = Tt(b), te = await ds(A, {
-          beforeSeq: R,
-          limit: 200,
-          instance: Z
-        });
-        if (x.current !== b) return;
-        T(null), a((ue) => cs(ue, te));
-      } catch (A) {
-        if (x.current !== b) return;
-        T({
-          message: String(A.message),
-          status: A instanceof jn ? A.status : null
-        });
-      } finally {
-        x.current === b && !R && h(!1);
-      }
-    },
-    []
-  ), Q = Tn(async (b) => {
+  const z = Tn(async (b, R) => {
+    R || h(!0);
+    try {
+      const { sessionId: A, instance: Z } = Tt(b), te = await ds(A, {
+        beforeSeq: R,
+        limit: 200,
+        instance: Z
+      });
+      if (x.current !== b) return;
+      T(null), a((ue) => cs(ue, te));
+    } catch (A) {
+      if (x.current !== b) return;
+      T({
+        message: String(A.message),
+        status: A instanceof jn ? A.status : null
+      });
+    } finally {
+      x.current === b && !R && h(!1);
+    }
+  }, []), Q = Tn(async (b) => {
     try {
       const { sessionId: R, instance: A } = Tt(b), Z = await us(R, A);
       if (x.current !== b) return;
@@ -5852,10 +5845,7 @@ function Ho({
             icon: /* @__PURE__ */ j.createElement(Fo, null),
             onClick: () => {
               const { sessionId: b, instance: R } = Tt(e);
-              fs(
-                b,
-                R
-              ).then(() => Ge.success(d(n, "exported"))).catch(
+              fs(b, R).then(() => Ge.success(d(n, "exported"))).catch(
                 (A) => Ge.error(String(A.message))
               );
             }

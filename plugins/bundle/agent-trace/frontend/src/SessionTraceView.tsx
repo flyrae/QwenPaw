@@ -233,34 +233,31 @@ export function SessionTraceView({
       .catch(() => setConfig(null));
   }, []);
 
-  const loadDetail = useCallback(
-    async (target: string, beforeSeq?: number) => {
-      if (!beforeSeq) setDetailLoading(true);
-      try {
-        // Central-mode refs carry the instance: <instance>~<session>.
-        const { sessionId, instance } = parseSessionRef(target);
-        const body = await fetchSessionEvents(sessionId, {
-          beforeSeq,
-          limit: 200,
-          instance,
-        });
-        if (sessionIdRef.current !== target) return;
-        setError(null);
-        setDetail((prev) => mergeSessionDetail(prev, body));
-      } catch (exc) {
-        if (sessionIdRef.current !== target) return;
-        setError({
-          message: String((exc as Error).message),
-          status: exc instanceof ApiError ? exc.status : null,
-        });
-      } finally {
-        if (sessionIdRef.current === target && !beforeSeq) {
-          setDetailLoading(false);
-        }
+  const loadDetail = useCallback(async (target: string, beforeSeq?: number) => {
+    if (!beforeSeq) setDetailLoading(true);
+    try {
+      // Central-mode refs carry the instance: <instance>~<session>.
+      const { sessionId, instance } = parseSessionRef(target);
+      const body = await fetchSessionEvents(sessionId, {
+        beforeSeq,
+        limit: 200,
+        instance,
+      });
+      if (sessionIdRef.current !== target) return;
+      setError(null);
+      setDetail((prev) => mergeSessionDetail(prev, body));
+    } catch (exc) {
+      if (sessionIdRef.current !== target) return;
+      setError({
+        message: String((exc as Error).message),
+        status: exc instanceof ApiError ? exc.status : null,
+      });
+    } finally {
+      if (sessionIdRef.current === target && !beforeSeq) {
+        setDetailLoading(false);
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
   const loadStats = useCallback(async (target: string) => {
     try {
@@ -689,10 +686,7 @@ export function SessionTraceView({
                       onClick={() => {
                         const { sessionId: rawId, instance } =
                           parseSessionRef(sessionId);
-                        void exportSessionFile(
-                          rawId,
-                          instance,
-                        )
+                        void exportSessionFile(rawId, instance)
                           .then(() => message.success(t(locale, "exported")))
                           .catch((exc: Error) =>
                             message.error(String(exc.message)),
