@@ -27,7 +27,7 @@ repos:
     rev: v3.1.0
     hooks:
       - id: add-trailing-comma
-        exclude: '(?x)(.*/skills/.*|^scripts/pack/|^e2e/)'
+        exclude: '(?x)(.*/skills/.*|^scripts/pack/|^e2e/|^plugins/bundle/agent-trace/)'
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.7.0
     hooks:
@@ -58,13 +58,13 @@ repos:
     hooks:
       - id: black
         args: [ --line-length=79 ]
-        exclude: '(?x)(.*/skills/.*|^scripts/pack/|^e2e/)'
+        exclude: '(?x)(.*/skills/.*|^scripts/pack/|^e2e/|^plugins/bundle/agent-trace/)'
   - repo: https://github.com/PyCQA/flake8
     rev: 6.1.0
     hooks:
       - id: flake8
         args: [ "--extend-ignore=E203"]
-        exclude: '(?x)(.*/skills/.*|^scripts/pack/|^e2e/)'
+        exclude: '(?x)(.*/skills/.*|^scripts/pack/|^e2e/|^plugins/bundle/agent-trace/)'
   - repo: https://github.com/pylint-dev/pylint
     rev: v3.0.2
     hooks:
@@ -122,7 +122,7 @@ repos:
       - id: prettier
         additional_dependencies: [ 'prettier@3.0.0' ]
         files: \.(tsx?)$
-        exclude: '(?x)(^web/|^console/|/dist/|.*/skills/.*|^scripts/pack/)'
+        exclude: '(?x)(^web/|^console/|/dist/|.*/skills/.*|^scripts/pack/|^plugins/bundle/agent-trace/)'
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.7
     hooks:
